@@ -73,8 +73,23 @@ DIGITAL         [0-9]
     yymore();
 }
 
+<STRING>\" {
+    cool_yylval.symbol = stringtable.add_string(yytext);
+    BEGIN(INITIAL);
+    return (STR_CONST);
+}
+
 <STRING>\n {
     cool_yylval.error_msg="Unterminated string constant";
+    curr_lineno++;
+    BEGIN(INITIAL);
+    return (ERROR);
+}
+
+<STRING><<EOF>> {
+    cool_yylval.error_msg="EOF in string constant";
+    BEGIN(INITIAL);
+    yyrestart(yyin);
     return (ERROR);
 }
 
@@ -126,17 +141,17 @@ f(?i:alse) { cool_yylval.Boolean = 0; return (BOOL_CONST); }
 t(?i:rue) { cool_yylval.Boolean = 1; return (BOOL_CONST); }
 
 [0-9]+ {
-    cool_yylval.symbol = inttable.add_string(cool_yylex);
+    cool_yylval.symbol = inttable.add_string(yytext);
     return (INT_CONST);
 }
 
 [a-z][a-zA-z0-9_]* {
-    cool_yylval.symbol = idtable.add_string(cool_yylex);
+    cool_yylval.symbol = idtable.add_string(yytext);
     return (OBJECTID);
 }
 
 [A-Z][a-zA-z0-9_]* {
-    cool_yylval.symbol = idtable.add_string(cool_yylex);
+    cool_yylval.symbol = idtable.add_string(yytext);
     return (TYPEID);
 }
 

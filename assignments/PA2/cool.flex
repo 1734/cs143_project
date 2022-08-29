@@ -28,8 +28,8 @@ extern FILE *fin; /* we read from this file */
  */
 #undef YY_INPUT
 #define YY_INPUT(buf,result,max_size) \
-	if ( (result = fread( (char*)buf, sizeof(char), max_size, fin)) < 0) \
-		YY_FATAL_ERROR( "read() in flex scanner failed");
+        if ( (result = fread( (char*)buf, sizeof(char), max_size, fin)) < 0) \
+                YY_FATAL_ERROR( "read() in flex scanner failed");
 
 char string_buf[MAX_STR_CONST]; /* to assemble string constants */
 char *string_buf_ptr;
@@ -45,13 +45,38 @@ extern YYSTYPE cool_yylval;
 
 %}
 
+%x STRING INLINE_COMMENT NESTED_COMMENT
+
 /*
  * Define names for regular expressions here.
  */
 
 DARROW          =>
 
+WHITESPACE      [ \f\r\t\v]
+
+DIGITAL         [0-9]
+
 %%
+
+\" {
+    BEGIN(STRING);
+    yymore();
+}
+
+<STRING>[^\\\n\"]+ { yymore(); }
+
+<STRING>\\[^\n] { yymore(); }
+
+<STRING>\\\n {
+    curr_lineno++;
+    yymore();
+}
+
+<STRING>\n {
+    cool_yylval.error_msg="Unterminated string constant";
+    return (ERROR);
+}
 
  /*
   *  Nested comments
@@ -61,7 +86,63 @@ DARROW          =>
  /*
   *  The multiple-character operators.
   */
-{DARROW}		{ return (DARROW); }
+{DARROW} { return (DARROW); }
+"<=" { return (LE); }
+"<-" { return (ASSIGN); }
+
+"+" { return int('+'); }
+"-" { return int('-'); }
+"*" { return int('*'); }
+"/" { return int('/'); }
+"(" { return int('('); }
+")" { return int(')'); }
+"<" { return int('<'); }
+"=" { return int('='); }
+"~" { return int('~'); }
+"," { return int(','); }
+"." { return int('.'); }
+"{" { return int('{'); }
+"}" { return int('}'); }
+"@" { return int('@'); }
+
+(?i:class) { return (CLASS); }
+(?i:else) { return (ELSE); }
+f(?i:alse) { cool_yylval.Boolean = 0; return (BOOL_CONST); }
+(?i:fi) { return (FI); }
+(?i:if) { return (IF); }
+(?i:in) { return (IN); }
+(?i:inherits) { return (INHERITS); }
+(?i:isvoid) { return (ISVOID); }
+(?i:let) { return (LET); }
+(?i:loop) { return (LOOP); }
+(?i:pool) { return (POOL); }
+(?i:then) { return (THEN); }
+(?i:while) { return (WHILE); }
+(?i:case) { return (CASE); }
+(?i:esac) { return (ESAC); }
+(?i:new) { return (NEW); }
+(?i:of) { return (OF); }
+(?i:not) { return (NOT); }
+t(?i:rue) { cool_yylval.Boolean = 1; return (BOOL_CONST); }
+
+[0-9]+ {
+    cool_yylval.symbol = inttable.add_string(cool_yylex);
+    return (INT_CONST);
+}
+
+[a-z][a-zA-z0-9_]* {
+    cool_yylval.symbol = idtable.add_string(cool_yylex);
+    return (OBJECTID);
+}
+
+[A-Z][a-zA-z0-9_]* {
+    cool_yylval.symbol = idtable.add_string(cool_yylex);
+    return (TYPEID);
+}
+
+{WHITESPACE} {}
+
+
 
  /*
   * Keywords are case-insensitive except for the values true and false,

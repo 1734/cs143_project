@@ -43,7 +43,11 @@ extern int verbose_flag;
 extern YYSTYPE cool_yylval;
 
 static int nested_comment_layer;
-extern "C" int yylex();
+
+extern "C" int yywrap(void)
+{
+    return 1;
+}
 
 /*
  *  Add Your own definitions here
@@ -198,7 +202,7 @@ t(?i:rue) { cool_yylval.boolean = 1; return (BOOL_CONST); }
         return (ERROR);
     }
     std::string::size_type pos = 0, pos_next;
-    while(pos_next = input.find('\\', pos) != std::string::npos) {
+    while((pos_next = input.find('\\', pos)) != std::string::npos) {
         output += input.substr(pos, pos_next);
         switch(input[pos_next+1]) {
             case 'b':

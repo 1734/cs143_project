@@ -90,6 +90,8 @@ DIGITAL         [0-9]
 "{" { return int('{'); }
 "}" { return int('}'); }
 "@" { return int('@'); }
+";" { return int(';'); }
+":" { return int(':'); }
 
 {WHITESPACE} {}
 
@@ -108,36 +110,60 @@ DIGITAL         [0-9]
   */
 
 (?i:class) { return (CLASS); }
+
 (?i:else) { return (ELSE); }
-f(?i:alse) { cool_yylval.boolean = 0; return (BOOL_CONST); }
+
+f(?i:alse) {
+    cool_yylval.boolean = 0;
+    return (BOOL_CONST);
+}
+
 (?i:fi) { return (FI); }
+
 (?i:if) { return (IF); }
+
 (?i:in) { return (IN); }
+
 (?i:inherits) { return (INHERITS); }
+
 (?i:isvoid) { return (ISVOID); }
+
 (?i:let) { return (LET); }
+
 (?i:loop) { return (LOOP); }
+
 (?i:pool) { return (POOL); }
+
 (?i:then) { return (THEN); }
+
 (?i:while) { return (WHILE); }
+
 (?i:case) { return (CASE); }
+
 (?i:esac) { return (ESAC); }
+
 (?i:new) { return (NEW); }
+
 (?i:of) { return (OF); }
+
 (?i:not) { return (NOT); }
-t(?i:rue) { cool_yylval.boolean = 1; return (BOOL_CONST); }
+
+t(?i:rue) {
+    cool_yylval.boolean = 1;
+    return (BOOL_CONST);
+}
 
 [0-9]+ {
     cool_yylval.symbol = inttable.add_string(yytext);
     return (INT_CONST);
 }
 
-[a-z][a-zA-z0-9_]* {
+[a-z][A-Za-z0-9_]* {
     cool_yylval.symbol = idtable.add_string(yytext);
     return (OBJECTID);
 }
 
-[A-Z][a-zA-z0-9_]* {
+[A-Z][a-zA-Z0-9_]* {
     cool_yylval.symbol = idtable.add_string(yytext);
     return (TYPEID);
 }
@@ -153,6 +179,7 @@ t(?i:rue) { cool_yylval.boolean = 1; return (BOOL_CONST); }
 }
 
 . {
+    cool_yylval.error_msg = yytext;
     return (ERROR);
 }
 
@@ -222,6 +249,7 @@ t(?i:rue) { cool_yylval.boolean = 1; return (BOOL_CONST); }
         }
         pos = pos_next + 2;
     }
+    output += input.substr(pos);
     if (output.length() >= MAX_STR_CONST) {
         cool_yylval.error_msg = "String constant too long";
         BEGIN(INITIAL);

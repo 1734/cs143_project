@@ -171,10 +171,6 @@
     /* Feature list may be empty, but no empty features in list. */
     feature_list:		/* empty */
     {  $$ = nil_Features(); }
-    | feature  /* single feature */
-    {
-      $$ = single_Features($1);
-    }
     | feature_list feature  /* several features */
     {
       $$ = append_Features($1, single_Features($2));
@@ -185,9 +181,9 @@
     {
       $$ = method($1, nil_Formals(), $5, $7);
     }
-    | OBJECTID '(' formal_list ')' ':' TYPEID '{' expr '}'
+    | OBJECTID '(' formal formal_list ')' ':' TYPEID '{' expr '}'
     {
-      $$ = method($1, $2, $6, $8);
+      $$ = method($1, append_Formals(single_Formals($3), $4), $7, $9);
     }
     | OBJECTID ':' TYPEID
     {
@@ -196,6 +192,21 @@
     | OBJECTID ':' TYPEID ASSIGN expr
     {
       $$ = attr($1, $3, $5);
+    }
+
+    formal_list:  /* empty */
+    {
+      $$ = nil_Formals();
+    }
+    | formal_list ',' formal
+    {
+      $$ = append_Formals($1, single_Formals($3));
+    }
+
+    formal:
+    OBJECTID ':' TYPEID
+    {
+      $$ = formal($1, $3);
     }
 
     /* end of grammar */

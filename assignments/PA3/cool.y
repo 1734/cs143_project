@@ -140,6 +140,11 @@
     %type <formal> formal
     %type <formals> formal_list
     %type <expression> expr
+    %type <expressions> comma_expr_list
+    %type <expressions> optional_argument_list
+    %type <expressions> block_expr_list
+    %type <expression> sub_let_expr
+    %type <expression> optional_assign_expr
 
     /* Precedence declarations go here. */
     
@@ -187,7 +192,7 @@
     }
     | OBJECTID ':' TYPEID
     {
-      $$ = attr($1, $3, nil_Expressions());
+      $$ = attr($1, $3, no_expr());
     }
     | OBJECTID ':' TYPEID ASSIGN expr
     {
@@ -207,6 +212,87 @@
     OBJECTID ':' TYPEID
     {
       $$ = formal($1, $3);
+    }
+
+    comma_expr_list:  /* empty */
+    {
+      $$ = nil_Expressions();
+    }
+    | ',' expr comma_expr_list
+    {
+      $$ = append_Expressions(single_Expressions($2), $3);
+    }
+
+    optional_argument_list:  /* empty */
+    {
+      $$ = nil_Expressions();
+    }
+    | expr comma_expr_list
+    {
+      $$ = append_Expressions(single_Expressions($1), $2);
+    }
+
+    block_expr_list:
+    expr ';'
+    {
+      $$ = single_Expressions($1);
+    }
+    | expr ';' block_expr_list
+    {
+      $$ = append_Expressions(single_Expressions($1), $3);
+    }
+
+    optional_assign_expr:  /* empty */
+    {
+      $$ = no_expr();
+    }
+    | ASSIGN expr
+    {
+      $$ = $2;
+    }
+
+    sub_let_expr:
+    IN expr
+    {
+      $$ = $2;
+    }
+    | ',' OBJECTID ':' TYPEID optional_assign_expr sub_let_expr
+    {
+      $$ = let($2, $4, $5, $6);
+    }
+
+    expr:
+    OBJECTID ASSIGN expr
+    {
+      $$ = assign($1, $3);
+    }
+    | expr '@' TYPEID '.' OBJECTID '(' optional_argument_list ')'
+    {
+      $$ = static_dispatch($1, $3, $5, $7);
+    }
+    | expr '.' OBJECTID '(' optional_argument_list ')'
+    {
+      $$ = dispatch($1, $3, $5);
+    }
+    | OBJECTID '(' optional_argument_list ')'
+    {
+      $$ = dispatch(object(idtable.add_string("self")), $1, $3);
+    }
+    | IF expr THEN expr ELSE expr FI
+    {
+      $$ = cond($2, $4, $6);
+    }
+    | WHILE expr LOOP expr POOL
+    {
+      $$ = loop($2, $4);
+    }
+    | '{' block_expr_list '}'
+    {
+      $$ = block($2);
+    }
+    | LET OBJECTID ':' TYPEID optional_assign_expr sub_let_expr
+    {
+      $$ = let($2, $4, $5, $6);
     }
 
     /* end of grammar */

@@ -147,8 +147,17 @@
     %type <expression> optional_assign_expr
 
     /* Precedence declarations go here. */
-    
-    
+    %right ASSIGN
+    %nonassoc NOT
+    %left LE '<' '='
+    %left '+' '-'
+    %left '*' '/'
+    %nonassoc ISVOID
+    %nonassoc '~'
+    %nonassoc IN
+    %left '@'
+    %left '.'
+
     %%
     /* 
     Save the root of the abstract syntax tree in a global variable.

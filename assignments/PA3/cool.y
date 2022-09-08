@@ -145,8 +145,11 @@
     %type <expressions> block_expr_list
     %type <expression> sub_let_expr
     %type <expression> optional_assign_expr
+    %type <case_> case
+    %type <cases> case_list
 
     /* Precedence declarations go here. */
+    %nonassoc LET_IN
     %right ASSIGN
     %nonassoc NOT
     %left LE '<' '='
@@ -154,7 +157,6 @@
     %left '*' '/'
     %nonassoc ISVOID
     %nonassoc '~'
-    %nonassoc IN
     %left '@'
     %left '.'
 
@@ -185,7 +187,7 @@
     /* Feature list may be empty, but no empty features in list. */
     feature_list:		/* empty */
     {  $$ = nil_Features(); }
-    | feature_list feature  /* several features */
+    | feature_list feature ';'  /* several features */
     {
       $$ = append_Features($1, single_Features($2));
     }
@@ -261,13 +263,29 @@
     }
 
     sub_let_expr:
-    IN expr
+    IN expr %prec LET_IN
     {
       $$ = $2;
     }
     | ',' OBJECTID ':' TYPEID optional_assign_expr sub_let_expr
     {
       $$ = let($2, $4, $5, $6);
+    }
+
+    case_list:
+    case
+    {
+      $$ = single_Cases($1);
+    }
+    | case case_list
+    {
+      $$ = append_Cases(single_Cases($1), $2);
+    }
+
+    case:
+    OBJECTID ':' TYPEID DARROW expr ';'
+    {
+      $$ = branch($1, $3, $5);
     }
 
     expr:
@@ -302,6 +320,74 @@
     | LET OBJECTID ':' TYPEID optional_assign_expr sub_let_expr
     {
       $$ = let($2, $4, $5, $6);
+    }
+    | CASE expr OF case_list ESAC
+    {
+      $$ = typcase($2, $4);
+    }
+    | NEW TYPEID
+    {
+      $$ = new_($2);
+    }
+    | ISVOID expr
+    {
+      $$ = isvoid($2);
+    }
+    | expr '+' expr
+    {
+      $$ = plus($1, $3);
+    }
+    | expr '-' expr
+    {
+      $$ = sub($1, $3);
+    }
+    | expr '*' expr
+    {
+      $$ = mul($1, $3);
+    }
+    | expr '/' expr
+    {
+      $$ = divide($1, $3);
+    }
+    | '~' expr
+    {
+      $$ = neg($2);
+    }
+    | expr '<' expr
+    {
+      $$ = lt($1, $3);
+    }
+    | expr LE expr
+    {
+      $$ = leq($1, $3);
+    }
+    | expr '=' expr
+    {
+      $$ = eq($1, $3);
+    }
+    | NOT expr
+    {
+      $$ = comp($2);
+    }
+    | '(' expr ')'
+    {
+      $$ = $2;
+    }
+    | OBJECTID
+    {
+      $$ = object($1);
+    }
+    | INT_CONST
+    {
+      $$ = int_const($1);
+    }
+    | STR_CONST
+    {
+      $$ = string_const($1);
+    }
+    | BOOL_CONST
+    {
+      $$ = bool_const($1);
     }
 
     /* end of grammar */

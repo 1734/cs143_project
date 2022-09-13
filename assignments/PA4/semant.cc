@@ -6,7 +6,6 @@
 #include "semant.h"
 #include "utilities.h"
 
-
 extern int semant_debug;
 extern char *curr_filename;
 
@@ -81,13 +80,106 @@ static void initialize_constants(void)
     val         = idtable.add_string("_val");
 }
 
+SymbolTable<Symbol, Symbol> object_name_to_type_table;
+std::map<Class_, std::map<Symbol, std::list<Symbol>>> map_method_to_types;
+std::map<Class_, std::map<Symbol, Symbol>> map_attr_to_type;
 
 
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
     /* Fill this in */
 
+    install_basic_classes();
+
+    for (int i = classes->first(); classes->more(i); i = classes->next(i) ) {
+        Symbol current_class_name = classes->nth(i)->get_name();
+        if (current_class_name == SELF_TYPE) {
+            semant_error(classes->nth(i)) << "Error! Class " << current_class_name << " redefined!" << std::endl;
+        }
+        if (map_symbol_to_class.find(current_class_name) != map_symbol_to_class.end()) {
+            semant_error(classes->nth(i)) << "Error! Class " << current_class_name << " redefined!" << std::endl;
+        } else {
+            map_symbol_to_class[current_class_name] = classes->nth(i);
+        }
+    }
+
+    // Create the class inheritance graph.
+    for (auto const& e : map_symbol_to_class) {
+        class_graph_node_list.push_back({e.second, NULL, {}, InheritGraphNode::WHITE});
+    }
+    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
+        Symbol parent_class_name = it->current_class->get_parent();
+        if (it->current_class->get_name() == Object) {
+            class_graph_node_root_ptr = &(*it);
+        } else {
+            if (map_symbol_to_class.find(parent_class_name) == map_symbol_to_class.end()) {
+                semant_error(it->current_class) << "Error! The parent class " << parent_class_name << " is not defined!" << std::endl;
+            } else {
+                Class_ parent_class = map_symbol_to_class[parent_class_name];
+                it->parent_node_ptr = &(*find_if(class_graph_node_list.begin(), class_graph_node_list.end(), [&] (const InheritGraphNode& node) { return node.current_class == parent_class; }));
+                (it->parent_node_ptr->children_node_ptr_list).push_back(&(*it));
+            }
+        }
+    }
+
+    std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle();
+    if (cycle_node_list_ptr) {
+        auto it = cycle_node_list_ptr->begin();
+        semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
+        ++it;
+        for (; it != cycle_node_list_ptr->end(); ++it) {
+            error_stream << " inherited by\n";
+            semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
+        }
+        error_stream << "\nforms an inheritance cycle.\n";
+        return;
+    }
+
+
 }
+
+// Traverse class inheritance graph to check for cycle.
+std::list<InheritGraphNode*>* ClassTable::get_graph_cycle() {
+    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
+        it->color = InheritGraphNode::WHITE;
+    }
+    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
+        if (it->color == InheritGraphNode::WHITE) {
+            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(&(*it));
+            if (cycle_node_list_ptr) {
+                return cycle_node_list_ptr;
+            }
+        }
+    }
+    return NULL;
+}
+
+std::list<InheritGraphNode*>* ClassTable::get_graph_cycle(InheritGraphNode* node_ptr) {
+    node_ptr->color = InheritGraphNode::GREY;
+    for (auto child_ptr : node_ptr->children_node_ptr_list) {
+        if (child_ptr->color == InheritGraphNode::WHITE) {
+            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(child_ptr);
+            if (cycle_node_list_ptr) {
+                if(cycle_node_list_ptr->front() != cycle_node_list_ptr->back()) {
+                    cycle_node_list_ptr -> push_back(node_ptr);
+                }
+                return cycle_node_list_ptr;
+            }
+        } else if (child_ptr->color == InheritGraphNode::GREY) {
+            std::list<InheritGraphNode*>* cycle_node_list_ptr = new std::list<InheritGraphNode*>;
+            cycle_node_list_ptr -> push_back(child_ptr);
+            cycle_node_list_ptr -> push_back(node_ptr);
+            return cycle_node_list_ptr;
+        }
+    }
+    node_ptr->color = InheritGraphNode::BLACK;
+    return NULL;
+}
+
+// // Traverse class inheritance tree to create type mapping for features.
+// bool ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_ptr) {
+
+// }
 
 void ClassTable::install_basic_classes() {
 
@@ -188,6 +280,8 @@ void ClassTable::install_basic_classes() {
 						      Str, 
 						      no_expr()))),
 	       filename);
+
+    map_symbol_to_class = { {Object, Object_class}, {IO, IO_class}, {Int, Int_class}, {Bool, Bool_class}, {Str, Str_class} };
 }
 
 ////////////////////////////////////////////////////////////////////

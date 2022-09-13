@@ -8,8 +8,19 @@
 #include "symtab.h"
 #include "list.h"
 
+#include <map>
+#include <list>
+#include <algorithm>
+
 #define TRUE 1
 #define FALSE 0
+
+typedef struct InheritGraphNode {
+  Class_ current_class = NULL;
+  InheritGraphNode* parent_node_ptr = NULL;
+  std::list<InheritGraphNode*> children_node_ptr_list;
+  enum { WHITE, GREY, BLACK } color = WHITE;
+}InheritGraphNode;
 
 class ClassTable;
 typedef ClassTable *ClassTableP;
@@ -31,8 +42,18 @@ public:
   ostream& semant_error();
   ostream& semant_error(Class_ c);
   ostream& semant_error(Symbol filename, tree_node *t);
+
+  std::map<Symbol, Class_> map_symbol_to_class;
+  std::list<InheritGraphNode> class_graph_node_list;
+  InheritGraphNode* class_graph_node_root_ptr;
+  std::list<InheritGraphNode*>* get_graph_cycle();
+  std::list<InheritGraphNode*>* get_graph_cycle(InheritGraphNode*);
+  bool dfs_inheritance_tree_for_feature_type(InheritGraphNode*);
 };
 
+extern SymbolTable<Symbol, Symbol> object_name_to_type_table;
+extern std::map<Class_, std::map<Symbol, std::list<Symbol>>> map_method_to_types;
+extern std::map<Class_, std::map<Symbol, Symbol>> map_attr_to_type;
 
 #endif
 

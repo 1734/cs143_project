@@ -39,6 +39,8 @@ public:
 #ifdef Class__EXTRAS
    Class__EXTRAS
 #endif
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_parent() = 0;
 };
 
 
@@ -53,6 +55,7 @@ public:
 #ifdef Feature_EXTRAS
    Feature_EXTRAS
 #endif
+   virtual bool is_method() = 0;
 };
 
 
@@ -168,6 +171,8 @@ public:
 #ifdef class__EXTRAS
    class__EXTRAS
 #endif
+   virtual Symbol get_name() { return name; }
+   virtual Symbol get_parent() { return parent; }
 };
 
 
@@ -194,6 +199,7 @@ public:
 #ifdef method_EXTRAS
    method_EXTRAS
 #endif
+   virtual bool is_method() { return true; }
 };
 
 
@@ -218,6 +224,7 @@ public:
 #ifdef attr_EXTRAS
    attr_EXTRAS
 #endif
+   virtual bool is_method() { return false; }
 };
 
 

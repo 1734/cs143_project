@@ -11,6 +11,7 @@
 #include <map>
 #include <list>
 #include <algorithm>
+#include <assert.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -50,13 +51,13 @@ public:
   std::list<InheritGraphNode*>* get_graph_cycle();
   std::list<InheritGraphNode*>* get_graph_cycle(InheritGraphNode*);
 
-  InheritGraphNode* class_inheritance_tree_node_root_ptr;
-  bool dfs_inheritance_tree_for_feature_type(InheritGraphNode*);
+  InheritGraphNode* inheritance_tree_node_root_ptr;
+  void dfs_inheritance_tree_for_feature_type(InheritGraphNode*);
 };
 
 extern SymbolTable<Symbol, Symbol> object_name_to_type_table;
-extern std::map<Class_, std::map<Symbol, std::list<Symbol>>> map_method_to_types;
-extern std::map<Class_, std::map<Symbol, Symbol>> map_attr_to_type;
+extern std::map<Symbol, std::map<Symbol, std::list<Symbol>>> map_method_to_types;
+extern std::map<Symbol, std::map<Symbol, Symbol>> map_attr_to_type;
 
 #endif
 

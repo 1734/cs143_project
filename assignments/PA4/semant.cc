@@ -81,8 +81,8 @@ static void initialize_constants(void)
 }
 
 SymbolTable<Symbol, Symbol> object_name_to_type_table;
-std::map<Class_, std::map<Symbol, std::list<Symbol>>> map_method_to_types;
-std::map<Class_, std::map<Symbol, Symbol>> map_attr_to_type;
+std::map<Symbol, std::map<Symbol, std::list<Symbol>>> map_class_to_map_method_to_types;
+std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
 
 
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
@@ -110,7 +110,7 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
     for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
         Symbol parent_class_name = it->current_class->get_parent();
         if (it->current_class->get_name() == Object) {
-            class_inheritance_tree_node_root_ptr = &(*it);
+            inheritance_tree_node_root_ptr = &(*it);
         } else {
             if (map_symbol_to_class.find(parent_class_name) == map_symbol_to_class.end()) {
                 semant_error(it->current_class) << "Error! The parent class " << parent_class_name << " is not defined!" << std::endl;
@@ -280,10 +280,53 @@ std::list<InheritGraphNode*>* ClassTable::get_graph_cycle(InheritGraphNode* node
     return NULL;
 }
 
-// // Traverse class inheritance tree to create type mapping for features.
-// bool ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_ptr) {
+// Traverse class inheritance tree to create type mapping for features.
+void ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_ptr) {
+    if (!node_ptr || !node_ptr->current_class) {
+        return;
+    }
+    Class_ current_class = node_ptr->current_class;
+    assert(dynamic_cast<class__class*>(current_class) && "The object pointed by current_class is not of type class__class!");
 
-// }
+    std::map<Symbol, std::list<Symbol>>* map_parent_method_to_types_ptr;
+    std::map<Symbol, Symbol>* map_parent_attr_to_type_ptr;
+    if (node_ptr->parent_node_ptr) {
+        Class_ parent_class = node_ptr->parent_node_ptr->current_class;
+        map_parent_method_to_types_ptr = &map_class_to_map_method_to_types[parent_class->get_name()];
+        map_parent_attr_to_type_ptr = &map_class_to_map_attr_to_type[parent_class->get_name()];
+    }
+    std::map<Symbol, std::list<Symbol>>* map_current_method_to_types_ptr = new std::map<Symbol, std::list<Symbol>>;
+    std::map<Symbol, Symbol>* map_current_attr_to_type_ptr = new std::map<Symbol, Symbol>;
+
+    for (int i = current_class->get_features()->first(); current_class->get_features()->more(i); i = current_class->get_features()->next(i) ) {
+        Feature current_feature = current_class->get_features()->nth(i);
+        method_class* current_method = dynamic_cast<method_class*>(current_feature);
+        attr_class* current_attr = dynamic_cast<attr_class*>(current_feature);
+        if ((current_method && current_attr) || (!current_method && !current_attr)) {
+            assert(0 && "Bad feature ptr!");
+        }
+        if (current_method) {
+            Symbol method_name = current_method->get_name();
+            if (map_parent_method_to_types_ptr && map_parent_method_to_types_ptr->find(method_name) != map_parent_method_to_types_ptr->end()) {
+                
+            }
+        }
+        if (current_attr) {
+            Symbol attr_name = current_attr->get_name();
+            if (map_parent_attr_to_type_ptr && map_parent_attr_to_type_ptr->find(attr_name) != map_parent_attr_to_type_ptr->end()) {
+                semant_error(current_class->get_filename(), current_attr) << " Attribute " << attr_name << " is an attribute of an inherited class." << endl;
+                continue;
+            }
+            map_current_attr_to_type_ptr->insert({attr_name, current_attr->get_type_decl()});
+        }
+    }
+
+    map_class_to_map_attr_to_type[current_class->get_name()] = std::move(*map_current_attr_to_type_ptr);
+
+    for (const auto child_node_ptr : node_ptr->children_node_ptr_list) {
+        dfs_inheritance_tree_for_feature_type(child_node_ptr);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////
 //
@@ -347,6 +390,12 @@ void program_class::semant()
     }
 
     classtable->check_class_inheritance_graph_for_cycle();
+    if (classtable->errors()) {
+        cerr << "Compilation halted due to static semantic errors." << endl;
+        exit(1);
+    }
+
+    classtable->dfs_inheritance_tree_for_feature_type(classtable->inheritance_tree_node_root_ptr);
     if (classtable->errors()) {
         cerr << "Compilation halted due to static semantic errors." << endl;
         exit(1);

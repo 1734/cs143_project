@@ -41,6 +41,7 @@ public:
 #endif
    virtual Symbol get_name() = 0;
    virtual Symbol get_parent() = 0;
+   virtual Features get_features() = 0;
 };
 
 
@@ -55,7 +56,6 @@ public:
 #ifdef Feature_EXTRAS
    Feature_EXTRAS
 #endif
-   virtual bool is_method() = 0;
 };
 
 
@@ -173,6 +173,7 @@ public:
 #endif
    virtual Symbol get_name() { return name; }
    virtual Symbol get_parent() { return parent; }
+   virtual Features get_features() { return features; }
 };
 
 
@@ -199,7 +200,10 @@ public:
 #ifdef method_EXTRAS
    method_EXTRAS
 #endif
-   virtual bool is_method() { return true; }
+   Symbol get_name() { return name; }
+   Symbol get_formalsl() { return formals; }
+   Symbol get_return_type() { return return_type; }
+   Expression get_expr() { return expr; }
 };
 
 
@@ -224,7 +228,9 @@ public:
 #ifdef attr_EXTRAS
    attr_EXTRAS
 #endif
-   virtual bool is_method() { return false; }
+   Symbol get_name() { return name; }
+   Symbol get_type_decl() { return type_decl; }
+   Expression get_init_expr() { return init; }
 };
 
 

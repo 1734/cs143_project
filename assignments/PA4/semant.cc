@@ -110,7 +110,7 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
     for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
         Symbol parent_class_name = it->current_class->get_parent();
         if (it->current_class->get_name() == Object) {
-            class_graph_node_root_ptr = &(*it);
+            class_inheritance_tree_node_root_ptr = &(*it);
         } else {
             if (map_symbol_to_class.find(parent_class_name) == map_symbol_to_class.end()) {
                 semant_error(it->current_class) << "Error! The parent class " << parent_class_name << " is not defined!" << std::endl;
@@ -122,64 +122,7 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
         }
     }
 
-    std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle();
-    if (cycle_node_list_ptr) {
-        auto it = cycle_node_list_ptr->begin();
-        semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
-        ++it;
-        for (; it != cycle_node_list_ptr->end(); ++it) {
-            error_stream << " inherited by\n";
-            semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
-        }
-        error_stream << "\nforms an inheritance cycle.\n";
-        return;
-    }
-
-
 }
-
-// Traverse class inheritance graph to check for cycle.
-std::list<InheritGraphNode*>* ClassTable::get_graph_cycle() {
-    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
-        it->color = InheritGraphNode::WHITE;
-    }
-    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
-        if (it->color == InheritGraphNode::WHITE) {
-            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(&(*it));
-            if (cycle_node_list_ptr) {
-                return cycle_node_list_ptr;
-            }
-        }
-    }
-    return NULL;
-}
-
-std::list<InheritGraphNode*>* ClassTable::get_graph_cycle(InheritGraphNode* node_ptr) {
-    node_ptr->color = InheritGraphNode::GREY;
-    for (auto child_ptr : node_ptr->children_node_ptr_list) {
-        if (child_ptr->color == InheritGraphNode::WHITE) {
-            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(child_ptr);
-            if (cycle_node_list_ptr) {
-                if(cycle_node_list_ptr->front() != cycle_node_list_ptr->back()) {
-                    cycle_node_list_ptr -> push_back(node_ptr);
-                }
-                return cycle_node_list_ptr;
-            }
-        } else if (child_ptr->color == InheritGraphNode::GREY) {
-            std::list<InheritGraphNode*>* cycle_node_list_ptr = new std::list<InheritGraphNode*>;
-            cycle_node_list_ptr -> push_back(child_ptr);
-            cycle_node_list_ptr -> push_back(node_ptr);
-            return cycle_node_list_ptr;
-        }
-    }
-    node_ptr->color = InheritGraphNode::BLACK;
-    return NULL;
-}
-
-// // Traverse class inheritance tree to create type mapping for features.
-// bool ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_ptr) {
-
-// }
 
 void ClassTable::install_basic_classes() {
 
@@ -284,6 +227,64 @@ void ClassTable::install_basic_classes() {
     map_symbol_to_class = { {Object, Object_class}, {IO, IO_class}, {Int, Int_class}, {Bool, Bool_class}, {Str, Str_class} };
 }
 
+void ClassTable::check_class_inheritance_graph_for_cycle() {
+    std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle();
+    if (cycle_node_list_ptr) {
+        auto it = cycle_node_list_ptr->begin();
+        semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
+        ++it;
+        for (; it != cycle_node_list_ptr->end(); ++it) {
+            error_stream << " inherited by\n";
+            semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
+        }
+        error_stream << "\nforms an inheritance cycle.\n";
+        return;
+    }
+}
+
+// Traverse class inheritance graph to check for cycle.
+std::list<InheritGraphNode*>* ClassTable::get_graph_cycle() {
+    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
+        it->color = InheritGraphNode::WHITE;
+    }
+    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
+        if (it->color == InheritGraphNode::WHITE) {
+            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(&(*it));
+            if (cycle_node_list_ptr) {
+                return cycle_node_list_ptr;
+            }
+        }
+    }
+    return NULL;
+}
+
+std::list<InheritGraphNode*>* ClassTable::get_graph_cycle(InheritGraphNode* node_ptr) {
+    node_ptr->color = InheritGraphNode::GREY;
+    for (auto child_ptr : node_ptr->children_node_ptr_list) {
+        if (child_ptr->color == InheritGraphNode::WHITE) {
+            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(child_ptr);
+            if (cycle_node_list_ptr) {
+                if(cycle_node_list_ptr->front() != cycle_node_list_ptr->back()) {
+                    cycle_node_list_ptr -> push_back(node_ptr);
+                }
+                return cycle_node_list_ptr;
+            }
+        } else if (child_ptr->color == InheritGraphNode::GREY) {
+            std::list<InheritGraphNode*>* cycle_node_list_ptr = new std::list<InheritGraphNode*>;
+            cycle_node_list_ptr -> push_back(child_ptr);
+            cycle_node_list_ptr -> push_back(node_ptr);
+            return cycle_node_list_ptr;
+        }
+    }
+    node_ptr->color = InheritGraphNode::BLACK;
+    return NULL;
+}
+
+// // Traverse class inheritance tree to create type mapping for features.
+// bool ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_ptr) {
+
+// }
+
 ////////////////////////////////////////////////////////////////////
 //
 // semant_error is an overloaded function for reporting errors
@@ -341,8 +342,14 @@ void program_class::semant()
     /* some semantic analysis code may go here */
 
     if (classtable->errors()) {
-	cerr << "Compilation halted due to static semantic errors." << endl;
-	exit(1);
+        cerr << "Compilation halted due to static semantic errors." << endl;
+        exit(1);
+    }
+
+    classtable->check_class_inheritance_graph_for_cycle();
+    if (classtable->errors()) {
+        cerr << "Compilation halted due to static semantic errors." << endl;
+        exit(1);
     }
 }
 

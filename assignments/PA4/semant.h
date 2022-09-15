@@ -45,9 +45,12 @@ public:
 
   std::map<Symbol, Class_> map_symbol_to_class;
   std::list<InheritGraphNode> class_graph_node_list;
-  InheritGraphNode* class_graph_node_root_ptr;
+
+  void check_class_inheritance_graph_for_cycle();
   std::list<InheritGraphNode*>* get_graph_cycle();
   std::list<InheritGraphNode*>* get_graph_cycle(InheritGraphNode*);
+
+  InheritGraphNode* class_inheritance_tree_node_root_ptr;
   bool dfs_inheritance_tree_for_feature_type(InheritGraphNode*);
 };
 

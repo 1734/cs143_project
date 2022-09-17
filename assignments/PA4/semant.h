@@ -2,7 +2,7 @@
 #define SEMANT_H_
 
 #include <assert.h>
-#include <iostream>  
+#include <iostream>
 #include "cool-tree.h"
 #include "stringtab.h"
 #include "symtab.h"
@@ -12,16 +12,10 @@
 #include <list>
 #include <algorithm>
 #include <assert.h>
+#include <vector>
 
 #define TRUE 1
 #define FALSE 0
-
-typedef struct InheritGraphNode {
-  Class_ current_class = NULL;
-  InheritGraphNode* parent_node_ptr = NULL;
-  std::list<InheritGraphNode*> children_node_ptr_list;
-  enum { WHITE, GREY, BLACK } color = WHITE;
-}InheritGraphNode;
 
 class ClassTable;
 typedef ClassTable *ClassTableP;
@@ -45,19 +39,22 @@ public:
   ostream& semant_error(Symbol filename, tree_node *t);
 
   std::map<Symbol, Class_> map_symbol_to_class;
-  std::list<InheritGraphNode> class_graph_node_list;
+  std::map<Symbol, Symbol> map_to_parent;
+  std::map<Symbol, std::vector<Symbol>> map_to_children;
+  enum color { WHITE, GREY, BLACK };
+  std::map<Symbol, color> map_to_color;
 
   void check_class_inheritance_graph_for_cycle();
-  std::list<InheritGraphNode*>* get_graph_cycle();
-  std::list<InheritGraphNode*>* get_graph_cycle(InheritGraphNode*);
+  std::vector<Symbol>* get_graph_cycle();
+  std::vector<Symbol>* get_graph_cycle(Symbol);
 
-  InheritGraphNode* inheritance_tree_node_root_ptr;
-  void dfs_inheritance_tree_for_feature_type(InheritGraphNode*);
+  void dfs_inheritance_tree_for_feature_type(Symbol);
+
 };
 
 extern SymbolTable<Symbol, Symbol> object_name_to_type_table;
-extern std::map<Symbol, std::map<Symbol, std::list<Symbol>>> map_method_to_types;
-extern std::map<Symbol, std::map<Symbol, Symbol>> map_attr_to_type;
+extern std::map<Symbol, std::map<Symbol, std::pair<Symbol, Formals>>> map_class_to_map_method_to_types;
+extern std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
 
 #endif
 

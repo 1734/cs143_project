@@ -70,6 +70,8 @@ public:
 #ifdef Formal_EXTRAS
    Formal_EXTRAS
 #endif
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_type_decl() = 0;
 };
 
 
@@ -201,7 +203,7 @@ public:
    method_EXTRAS
 #endif
    Symbol get_name() { return name; }
-   Symbol get_formalsl() { return formals; }
+   Formals get_formals() { return formals; }
    Symbol get_return_type() { return return_type; }
    Expression get_expr() { return expr; }
 };
@@ -253,6 +255,8 @@ public:
 #ifdef formal_EXTRAS
    formal_EXTRAS
 #endif
+   virtual Symbol get_name() { return name; }
+   virtual Symbol get_type_decl() { return type_decl; }
 };
 
 

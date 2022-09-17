@@ -81,7 +81,7 @@ static void initialize_constants(void)
 }
 
 SymbolTable<Symbol, Symbol> object_name_to_type_table;
-std::map<Symbol, std::map<Symbol, std::list<Symbol>>> map_class_to_map_method_to_types;
+std::map<Symbol, std::map<Symbol, std::pair<Symbol, Formals>>> map_class_to_map_method_to_types;
 std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
 
 
@@ -99,27 +99,26 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
         if (map_symbol_to_class.find(current_class_name) != map_symbol_to_class.end()) {
             semant_error(classes->nth(i)) << "Error! Class " << current_class_name << " redefined!" << std::endl;
         } else {
+            assert(dynamic_cast<class__class*>(classes->nth(i)) && "The object pointed is not of type class__class!");
             map_symbol_to_class[current_class_name] = classes->nth(i);
         }
     }
 
     // Create the class inheritance graph.
     for (auto const& e : map_symbol_to_class) {
-        class_graph_node_list.push_back({e.second, NULL, {}, InheritGraphNode::WHITE});
-    }
-    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
-        Symbol parent_class_name = it->current_class->get_parent();
-        if (it->current_class->get_name() == Object) {
-            inheritance_tree_node_root_ptr = &(*it);
-        } else {
-            if (map_symbol_to_class.find(parent_class_name) == map_symbol_to_class.end()) {
-                semant_error(it->current_class) << "Error! The parent class " << parent_class_name << " is not defined!" << std::endl;
-            } else {
-                Class_ parent_class = map_symbol_to_class[parent_class_name];
-                it->parent_node_ptr = &(*find_if(class_graph_node_list.begin(), class_graph_node_list.end(), [&] (const InheritGraphNode& node) { return node.current_class == parent_class; }));
-                (it->parent_node_ptr->children_node_ptr_list).push_back(&(*it));
-            }
+        Symbol current_name = e.first;
+        Symbol parent_name = e.second->get_parent();
+        if (current_name != Object && map_symbol_to_class.find(parent_name) == map_symbol_to_class.end()) {
+            semant_error(e.second) << "Error! The parent class " << parent_name << " is not defined!" << std::endl;
+            continue;
         }
+        if (parent_name == Int || parent_name == Str || parent_name == Bool) {
+            semant_error(e.second) << "Class " << current_name << " cannot inherit class " << parent_name << "." << std::endl;
+            continue;
+        }
+        map_to_parent[current_name] = parent_name;
+        map_to_children[parent_name].push_back(current_name);
+        map_to_color[current_name] = WHITE;
     }
 
 }
@@ -228,78 +227,78 @@ void ClassTable::install_basic_classes() {
 }
 
 void ClassTable::check_class_inheritance_graph_for_cycle() {
-    std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle();
-    if (cycle_node_list_ptr) {
-        auto it = cycle_node_list_ptr->begin();
-        semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
+    std::vector<Symbol>* cycle_ptr = get_graph_cycle();
+    if (cycle_ptr) {
+        auto it = cycle_ptr->begin();
+        semant_error(map_symbol_to_class[*it]) << "Class " << (*it);
         ++it;
-        for (; it != cycle_node_list_ptr->end(); ++it) {
-            error_stream << " inherited by\n";
-            semant_error((*it)->current_class) << "Class " << (*it)->current_class->get_name();
+        for (; it != cycle_ptr->end(); ++it) {
+            error_stream << " inherits\n";
+            semant_error(map_symbol_to_class[*it]) << "Class " << (*it);
         }
         error_stream << "\nforms an inheritance cycle.\n";
-        return;
+        delete cycle_ptr;
     }
 }
 
 // Traverse class inheritance graph to check for cycle.
-std::list<InheritGraphNode*>* ClassTable::get_graph_cycle() {
-    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
-        it->color = InheritGraphNode::WHITE;
+std::vector<Symbol>* ClassTable::get_graph_cycle() {
+    for (auto const& e : map_symbol_to_class) {
+        map_to_color[e.first] = WHITE;
     }
-    for (auto it = class_graph_node_list.begin(); it != class_graph_node_list.end(); ++it) {
-        if (it->color == InheritGraphNode::WHITE) {
-            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(&(*it));
-            if (cycle_node_list_ptr) {
-                return cycle_node_list_ptr;
+    for (auto const& e : map_symbol_to_class) {
+        if (map_to_color[e.first] == WHITE) {
+            std::vector<Symbol>* cycle_ptr = get_graph_cycle(e.first);
+            if (cycle_ptr) {
+                return cycle_ptr;
             }
         }
     }
     return NULL;
 }
 
-std::list<InheritGraphNode*>* ClassTable::get_graph_cycle(InheritGraphNode* node_ptr) {
-    node_ptr->color = InheritGraphNode::GREY;
-    for (auto child_ptr : node_ptr->children_node_ptr_list) {
-        if (child_ptr->color == InheritGraphNode::WHITE) {
-            std::list<InheritGraphNode*>* cycle_node_list_ptr = get_graph_cycle(child_ptr);
-            if (cycle_node_list_ptr) {
-                if(cycle_node_list_ptr->front() != cycle_node_list_ptr->back()) {
-                    cycle_node_list_ptr -> push_back(node_ptr);
+std::vector<Symbol>* ClassTable::get_graph_cycle(Symbol current_name) {
+    map_to_color[current_name] = GREY;
+    for (const auto& child_name : map_to_children[current_name]) {
+        if (map_to_color[child_name] == WHITE) {
+            std::vector<Symbol>* cycle_ptr = get_graph_cycle(child_name);
+            if (cycle_ptr) {
+                if(cycle_ptr->front() != cycle_ptr->back()) {
+                    cycle_ptr -> push_back(current_name);
                 }
-                return cycle_node_list_ptr;
+                return cycle_ptr;
             }
-        } else if (child_ptr->color == InheritGraphNode::GREY) {
-            std::list<InheritGraphNode*>* cycle_node_list_ptr = new std::list<InheritGraphNode*>;
-            cycle_node_list_ptr -> push_back(child_ptr);
-            cycle_node_list_ptr -> push_back(node_ptr);
-            return cycle_node_list_ptr;
+        } else if (map_to_color[child_name] == GREY) {
+            std::vector<Symbol>* cycle_ptr = new std::vector<Symbol>;
+            cycle_ptr -> push_back(child_name);
+            cycle_ptr -> push_back(current_name);
+            return cycle_ptr;
         }
     }
-    node_ptr->color = InheritGraphNode::BLACK;
+    map_to_color[current_name] = BLACK;
     return NULL;
 }
 
 // Traverse class inheritance tree to create type mapping for features.
-void ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_ptr) {
-    if (!node_ptr || !node_ptr->current_class) {
-        return;
+void ClassTable::dfs_inheritance_tree_for_feature_type(Symbol current_class_name) {
+    if (map_symbol_to_class.find(current_class_name) == map_symbol_to_class.end()) {
+        assert(0 && "current_class_name unknown!");
     }
-    Class_ current_class = node_ptr->current_class;
+    Class_ current_class = map_symbol_to_class[current_class_name];
     assert(dynamic_cast<class__class*>(current_class) && "The object pointed by current_class is not of type class__class!");
 
-    std::map<Symbol, std::list<Symbol>>* map_parent_method_to_types_ptr;
-    std::map<Symbol, Symbol>* map_parent_attr_to_type_ptr;
-    if (node_ptr->parent_node_ptr) {
-        Class_ parent_class = node_ptr->parent_node_ptr->current_class;
-        map_parent_method_to_types_ptr = &map_class_to_map_method_to_types[parent_class->get_name()];
-        map_parent_attr_to_type_ptr = &map_class_to_map_attr_to_type[parent_class->get_name()];
+    std::map<Symbol, std::pair<Symbol, Formals>>* map_parent_method_to_types_ptr = NULL;
+    std::map<Symbol, Symbol>* map_parent_attr_to_type_ptr = NULL;
+    Symbol parent_class_name = current_class->get_parent();
+    if (current_class_name != Object) {
+        map_parent_method_to_types_ptr = &map_class_to_map_method_to_types[parent_class_name];
+        map_parent_attr_to_type_ptr = &map_class_to_map_attr_to_type[parent_class_name];
     }
-    std::map<Symbol, std::list<Symbol>>* map_current_method_to_types_ptr = new std::map<Symbol, std::list<Symbol>>;
+    std::map<Symbol, std::pair<Symbol, Formals>>* map_current_method_to_types_ptr = new std::map<Symbol, std::pair<Symbol, Formals>>;
     std::map<Symbol, Symbol>* map_current_attr_to_type_ptr = new std::map<Symbol, Symbol>;
 
-    for (int i = current_class->get_features()->first(); current_class->get_features()->more(i); i = current_class->get_features()->next(i) ) {
-        Feature current_feature = current_class->get_features()->nth(i);
+    for (int feature_index = current_class->get_features()->first(); current_class->get_features()->more(feature_index); feature_index = current_class->get_features()->next(feature_index)) {
+        Feature current_feature = current_class->get_features()->nth(feature_index);
         method_class* current_method = dynamic_cast<method_class*>(current_feature);
         attr_class* current_attr = dynamic_cast<attr_class*>(current_feature);
         if ((current_method && current_attr) || (!current_method && !current_attr)) {
@@ -307,9 +306,38 @@ void ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_pt
         }
         if (current_method) {
             Symbol method_name = current_method->get_name();
-            if (map_parent_method_to_types_ptr && map_parent_method_to_types_ptr->find(method_name) != map_parent_method_to_types_ptr->end()) {
-                
+            if (map_current_method_to_types_ptr && (map_current_method_to_types_ptr->find(method_name) != map_current_method_to_types_ptr->end())) {
+                semant_error(current_class->get_filename(), current_method) << " Method " << method_name << " is multiply defined." << endl;
+                continue;
             }
+            if (map_parent_method_to_types_ptr && (map_parent_method_to_types_ptr->find(method_name) != map_parent_method_to_types_ptr->end())) {
+                Symbol parent_method_return_type = (*map_parent_method_to_types_ptr)[method_name].first;
+                Symbol current_method_return_type = current_method->get_return_type();
+                if (current_method_return_type != parent_method_return_type) {
+                    semant_error(current_class->get_filename(), current_method) << " In redefined method " << method_name << " , return type " << current_method_return_type << " is different from original return type " << parent_method_return_type << "." << endl;
+                    continue;
+                }
+                Formals parent_method_formals = (*map_parent_method_to_types_ptr)[method_name].second;
+                Formals current_method_formals = current_method->get_formals();
+                if (current_method_formals->len() != parent_method_formals->len()) {
+                    semant_error(current_class->get_filename(), current_method) << " Incompatible number of formal parameters in redefined method " << method_name << "." << endl;
+                    continue;
+                }
+                bool continue_flag = false;
+                for (int formal_index = current_method_formals->first(); current_method_formals->more(formal_index); formal_index = current_method_formals->next(formal_index)) {
+                    Symbol parent_formal_type = parent_method_formals->nth(formal_index)->get_type_decl();
+                    Symbol current_formal_type = current_method_formals->nth(formal_index)->get_type_decl();
+                    if (current_formal_type != parent_formal_type) {
+                        semant_error(current_class->get_filename(), current_method_formals->nth(formal_index)) << "In redefined method " << method_name << " , parameter type " << current_formal_type << " is different from original type " << parent_formal_type << endl;
+                        continue_flag = true;
+                        break;
+                    }
+                }
+                if (continue_flag) {
+                    continue;
+                }
+            }
+            map_current_method_to_types_ptr->insert({method_name, {current_method->get_return_type(), current_method->get_formals()}});
         }
         if (current_attr) {
             Symbol attr_name = current_attr->get_name();
@@ -321,10 +349,18 @@ void ClassTable::dfs_inheritance_tree_for_feature_type(InheritGraphNode* node_pt
         }
     }
 
-    map_class_to_map_attr_to_type[current_class->get_name()] = std::move(*map_current_attr_to_type_ptr);
+    map_class_to_map_method_to_types[current_class->get_name()] = std::move(*map_current_method_to_types_ptr);
+    if(map_parent_method_to_types_ptr) {
+        map_class_to_map_method_to_types[current_class->get_name()].insert(map_parent_method_to_types_ptr->begin(), map_parent_method_to_types_ptr->end());
+    }
 
-    for (const auto child_node_ptr : node_ptr->children_node_ptr_list) {
-        dfs_inheritance_tree_for_feature_type(child_node_ptr);
+    map_class_to_map_attr_to_type[current_class->get_name()] = std::move(*map_current_attr_to_type_ptr);
+    if(map_parent_attr_to_type_ptr) {
+        map_class_to_map_attr_to_type[current_class->get_name()].insert(map_parent_attr_to_type_ptr->begin(), map_parent_attr_to_type_ptr->end());
+    }
+
+    for (const auto child_class_name : map_to_children[current_class_name]) {
+        dfs_inheritance_tree_for_feature_type(child_class_name);
     }
 }
 
@@ -395,7 +431,7 @@ void program_class::semant()
         exit(1);
     }
 
-    classtable->dfs_inheritance_tree_for_feature_type(classtable->inheritance_tree_node_root_ptr);
+    classtable->dfs_inheritance_tree_for_feature_type(Object);
     if (classtable->errors()) {
         cerr << "Compilation halted due to static semantic errors." << endl;
         exit(1);

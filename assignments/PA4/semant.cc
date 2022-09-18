@@ -80,6 +80,7 @@ static void initialize_constants(void)
     val         = idtable.add_string("_val");
 }
 
+std::map<Symbol, Class_> map_symbol_to_class;
 SymbolTable<Symbol, Symbol> object_name_to_type_table;
 std::map<Symbol, std::map<Symbol, std::pair<Symbol, Formals>>> map_class_to_map_method_to_types;
 std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
@@ -364,6 +365,17 @@ void ClassTable::dfs_inheritance_tree_for_feature_type(Symbol current_class_name
     }
 }
 
+void ClassTable::check_main() {
+    if (map_symbol_to_class.find(Main) == map_symbol_to_class.end()) {
+        semant_error() << "Class Main is not defined." << endl;
+        return;
+    }
+    if (map_class_to_map_method_to_types[Main].find(main_meth) == map_class_to_map_method_to_types[Main].end()) {
+        semant_error(map_symbol_to_class[Main]) << " No 'main' method in class Main." << endl;
+        return;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////
 //
 // semant_error is an overloaded function for reporting errors
@@ -432,10 +444,21 @@ void program_class::semant()
     }
 
     classtable->dfs_inheritance_tree_for_feature_type(Object);
+
+    classtable->check_main();
+
+    for (int index_class = classes->first(); classes->more(index_class); index_class = classes->next(index_class)) {
+        Class_ current_class = classes->nth(index_class);
+        current_class->type_check(classtable);
+    }
+
     if (classtable->errors()) {
         cerr << "Compilation halted due to static semantic errors." << endl;
         exit(1);
     }
+
 }
 
-
+void class__class::type_check(ClassTable* classtable) {
+    
+}

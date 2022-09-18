@@ -12,6 +12,7 @@
 #include "tree.h"
 #include "cool-tree.handcode.h"
 
+class ClassTable;
 
 // define the class for phylum
 // define simple phylum - Program
@@ -42,6 +43,7 @@ public:
    virtual Symbol get_name() = 0;
    virtual Symbol get_parent() = 0;
    virtual Features get_features() = 0;
+   virtual void type_check(ClassTable*) = 0;
 };
 
 
@@ -176,6 +178,7 @@ public:
    virtual Symbol get_name() { return name; }
    virtual Symbol get_parent() { return parent; }
    virtual Features get_features() { return features; }
+   virtual void type_check(ClassTable*);
 };
 
 

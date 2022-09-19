@@ -155,18 +155,15 @@ public:
       swap(node1, node2);
     }
     node2 = get_ancestor(node2, depth[node2]-depth[node1]);
-    cerr << "node2: " << node2 << endl;
     if (node1 == node2) {
       return node1;
     }
     for(int i = max_lg2_depth; i >= 0; --i) {
       if(ancestor[node1][i] != ancestor[node2][i]) {
-        cerr << "i: " << i << endl;
         node1 = ancestor[node1][i];
         node2 = ancestor[node2][i];
       }
     }
-    cerr << "max_lg2_depth: " << max_lg2_depth << endl;
     return ancestor[node1][0];
   }
 
@@ -177,7 +174,7 @@ extern std::map<Symbol, std::map<Symbol, std::pair<Symbol, Formals>>> map_class_
 extern std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
 extern Symbol current_class_name;
 
-extern TreeRelation<Symbol>* tree_handler;
+extern TreeRelation<Symbol>* class_tree_handler;
 
 #endif
 

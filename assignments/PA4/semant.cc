@@ -85,7 +85,7 @@ std::map<Symbol, std::map<Symbol, std::pair<Symbol, Formals>>> map_class_to_map_
 std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
 Symbol current_class_name;
 
-TreeRelation<Symbol>* tree_handler = NULL;
+TreeRelation<Symbol>* class_tree_handler = NULL;
 
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
@@ -462,8 +462,7 @@ void program_class::semant()
 
     classtable->check_main();
 
-    tree_handler = new TreeRelation<Symbol>(Object, classtable->map_to_parent, classtable->map_to_children);
-    cerr << tree_handler->get_lca({id})
+    class_tree_handler = new TreeRelation<Symbol>(Object, classtable->map_to_parent, classtable->map_to_children);
 
     for (int index_class = classes->first(); classes->more(index_class); index_class = classes->next(index_class)) {
         Class_ current_class = classes->nth(index_class);
@@ -501,10 +500,17 @@ void class__class::type_check(ClassTable* classtable) {
             if (classtable->map_symbol_to_class.find(current_method->get_return_type()) == classtable->map_symbol_to_class.end()) {
                 classtable->semant_error(current_method) << "Undefined return type " << current_method->get_return_type() << " in method " << current_method->get_name() << "." << endl;
             }
-            // Symbol body_expr_return_type = current_method->get_expr()->type_check(classtable);
-            // if (body_expr_return_type == SELF_TYPE) {
-            //     body_expr_return_type = current_class_name;
-            // }
+            Symbol body_expr_return_type = current_method->get_expr()->type_check(classtable);
+            if (body_expr_return_type == SELF_TYPE) {
+                body_expr_return_type = current_class_name;
+            }
+            if ((classtable->map_symbol_to_class.find(current_method->get_return_type()) != classtable->map_symbol_to_class.end())
+                && (classtable->map_symbol_to_class.find(body_expr_return_type) != classtable->map_symbol_to_class.end()))
+            {
+                if (class_tree_handler->get_lca(current_method->get_return_type(), body_expr_return_type) != current_method->get_return_type()) {
+                    classtable->semant_error(current_method) << "Inferred return type " << body_expr_return_type << " of method " << current_method->get_name() << " does not conform to declared return type " << current_method->get_return_type() << "." << endl;
+                }
+            }
         }
     }
     object_name_to_type_table.exitscope();
@@ -524,4 +530,8 @@ void formal_class::type_check(ClassTable* classtable) {
     } else {
         object_name_to_type_table.addid(name, &type_decl);
     }
+}
+
+Symbol int_const_class::type_check(ClassTable* classtable) {
+    return Int;
 }

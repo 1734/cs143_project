@@ -89,7 +89,7 @@ public:
 #ifdef Expression_EXTRAS
    Expression_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*) {return idtable.add_string("Object");};
+   virtual Symbol type_check(ClassTable*) { return idtable.add_string("Object"); };
 };
 
 
@@ -309,7 +309,7 @@ public:
 #ifdef assign_EXTRAS
    assign_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -336,7 +336,7 @@ public:
 #ifdef static_dispatch_EXTRAS
    static_dispatch_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -361,7 +361,7 @@ public:
 #ifdef dispatch_EXTRAS
    dispatch_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -386,7 +386,7 @@ public:
 #ifdef cond_EXTRAS
    cond_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -409,7 +409,7 @@ public:
 #ifdef loop_EXTRAS
    loop_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -432,7 +432,7 @@ public:
 #ifdef typcase_EXTRAS
    typcase_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -453,7 +453,7 @@ public:
 #ifdef block_EXTRAS
    block_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -480,7 +480,7 @@ public:
 #ifdef let_EXTRAS
    let_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -503,7 +503,7 @@ public:
 #ifdef plus_EXTRAS
    plus_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -526,7 +526,7 @@ public:
 #ifdef sub_EXTRAS
    sub_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -549,7 +549,7 @@ public:
 #ifdef mul_EXTRAS
    mul_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -572,7 +572,7 @@ public:
 #ifdef divide_EXTRAS
    divide_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -593,7 +593,7 @@ public:
 #ifdef neg_EXTRAS
    neg_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -616,7 +616,7 @@ public:
 #ifdef lt_EXTRAS
    lt_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -639,7 +639,7 @@ public:
 #ifdef eq_EXTRAS
    eq_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -662,7 +662,7 @@ public:
 #ifdef leq_EXTRAS
    leq_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -683,7 +683,7 @@ public:
 #ifdef comp_EXTRAS
    comp_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -704,7 +704,7 @@ public:
 #ifdef int_const_EXTRAS
    int_const_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -725,7 +725,7 @@ public:
 #ifdef bool_const_EXTRAS
    bool_const_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -746,7 +746,7 @@ public:
 #ifdef string_const_EXTRAS
    string_const_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -767,7 +767,7 @@ public:
 #ifdef new__EXTRAS
    new__EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -788,7 +788,7 @@ public:
 #ifdef isvoid_EXTRAS
    isvoid_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -807,7 +807,7 @@ public:
 #ifdef no_expr_EXTRAS
    no_expr_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -828,7 +828,7 @@ public:
 #ifdef object_EXTRAS
    object_EXTRAS
 #endif
-   // virtual Symbol type_check(ClassTable*);
+//    virtual Symbol type_check(ClassTable*);
 };
 
 

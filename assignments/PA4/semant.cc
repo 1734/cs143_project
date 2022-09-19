@@ -80,11 +80,12 @@ static void initialize_constants(void)
     val         = idtable.add_string("_val");
 }
 
-std::map<Symbol, Class_> map_symbol_to_class;
 SymbolTable<Symbol, Symbol> object_name_to_type_table;
 std::map<Symbol, std::map<Symbol, std::pair<Symbol, Formals>>> map_class_to_map_method_to_types;
 std::map<Symbol, std::map<Symbol, Symbol>> map_class_to_map_attr_to_type;
+Symbol current_class_name;
 
+TreeRelation<Symbol>* tree_handler = NULL;
 
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
@@ -308,20 +309,20 @@ void ClassTable::dfs_inheritance_tree_for_feature_type(Symbol current_class_name
         if (current_method) {
             Symbol method_name = current_method->get_name();
             if (map_current_method_to_types_ptr && (map_current_method_to_types_ptr->find(method_name) != map_current_method_to_types_ptr->end())) {
-                semant_error(current_class->get_filename(), current_method) << " Method " << method_name << " is multiply defined." << endl;
+                semant_error(current_class->get_filename(), current_method) << "Method " << method_name << " is multiply defined." << endl;
                 continue;
             }
             if (map_parent_method_to_types_ptr && (map_parent_method_to_types_ptr->find(method_name) != map_parent_method_to_types_ptr->end())) {
                 Symbol parent_method_return_type = (*map_parent_method_to_types_ptr)[method_name].first;
                 Symbol current_method_return_type = current_method->get_return_type();
                 if (current_method_return_type != parent_method_return_type) {
-                    semant_error(current_class->get_filename(), current_method) << " In redefined method " << method_name << " , return type " << current_method_return_type << " is different from original return type " << parent_method_return_type << "." << endl;
+                    semant_error(current_class->get_filename(), current_method) << "In redefined method " << method_name << ", return type " << current_method_return_type << " is different from original return type " << parent_method_return_type << "." << endl;
                     continue;
                 }
                 Formals parent_method_formals = (*map_parent_method_to_types_ptr)[method_name].second;
                 Formals current_method_formals = current_method->get_formals();
                 if (current_method_formals->len() != parent_method_formals->len()) {
-                    semant_error(current_class->get_filename(), current_method) << " Incompatible number of formal parameters in redefined method " << method_name << "." << endl;
+                    semant_error(current_class->get_filename(), current_method) << "Incompatible number of formal parameters in redefined method " << method_name << "." << endl;
                     continue;
                 }
                 bool continue_flag = false;
@@ -342,8 +343,16 @@ void ClassTable::dfs_inheritance_tree_for_feature_type(Symbol current_class_name
         }
         if (current_attr) {
             Symbol attr_name = current_attr->get_name();
+            if (attr_name == self) {
+                semant_error(current_class->get_filename(), current_attr) << "'self' cannot be the name of an attribute." << endl;
+                continue;
+            }
             if (map_parent_attr_to_type_ptr && map_parent_attr_to_type_ptr->find(attr_name) != map_parent_attr_to_type_ptr->end()) {
-                semant_error(current_class->get_filename(), current_attr) << " Attribute " << attr_name << " is an attribute of an inherited class." << endl;
+                semant_error(current_class->get_filename(), current_attr) << "Attribute " << attr_name << " is an attribute of an inherited class." << endl;
+                continue;
+            }
+            if (map_current_attr_to_type_ptr->find(attr_name) != map_current_attr_to_type_ptr->end()) {
+                semant_error(current_class->get_filename(), current_attr) << "Attribute " << attr_name << " is multiply defined in class." << endl;
                 continue;
             }
             map_current_attr_to_type_ptr->insert({attr_name, current_attr->get_type_decl()});
@@ -371,7 +380,7 @@ void ClassTable::check_main() {
         return;
     }
     if (map_class_to_map_method_to_types[Main].find(main_meth) == map_class_to_map_method_to_types[Main].end()) {
-        semant_error(map_symbol_to_class[Main]) << " No 'main' method in class Main." << endl;
+        semant_error(map_symbol_to_class[Main]) << "No 'main' method in class Main." << endl;
         return;
     }
 }
@@ -399,6 +408,12 @@ ostream& ClassTable::semant_error(Class_ c)
 ostream& ClassTable::semant_error(Symbol filename, tree_node *t)
 {
     error_stream << filename << ":" << t->get_line_number() << ": ";
+    return semant_error();
+}
+
+ostream& ClassTable::semant_error(tree_node *t)
+{
+    error_stream << map_symbol_to_class[current_class_name]->get_filename() << ":" << t->get_line_number() << ": ";
     return semant_error();
 }
 
@@ -447,6 +462,9 @@ void program_class::semant()
 
     classtable->check_main();
 
+    tree_handler = new TreeRelation<Symbol>(Object, classtable->map_to_parent, classtable->map_to_children);
+    cerr << tree_handler->get_lca({id})
+
     for (int index_class = classes->first(); classes->more(index_class); index_class = classes->next(index_class)) {
         Class_ current_class = classes->nth(index_class);
         current_class->type_check(classtable);
@@ -460,5 +478,50 @@ void program_class::semant()
 }
 
 void class__class::type_check(ClassTable* classtable) {
+    current_class_name = name;
+    object_name_to_type_table.enterscope();
+    for (auto& e : map_class_to_map_attr_to_type[name]) {
+        object_name_to_type_table.addid(e.first, &(e.second));
+    }
     
+    for (int index_feature = get_features()->first(); get_features()->more(index_feature); index_feature = get_features()->next(index_feature)) {
+        Feature current_feature = get_features()->nth(index_feature);
+        method_class* current_method = dynamic_cast<method_class*>(current_feature);
+        attr_class* current_attr = dynamic_cast<attr_class*>(current_feature);
+        if ((current_method && current_attr) || (!current_method && !current_attr)) {
+            assert(0 && "Bad feature ptr!");
+        }
+        if (current_method) {
+            object_name_to_type_table.enterscope();
+            object_name_to_type_table.addid(self, &SELF_TYPE);
+            for (int index_formal = current_method->get_formals()->first(); current_method->get_formals()->more(index_formal); index_formal = current_method->get_formals()->next(index_formal)) {
+                Formal current_formal = current_method->get_formals()->nth(index_formal);
+                current_formal->type_check(classtable);
+            }
+            if (classtable->map_symbol_to_class.find(current_method->get_return_type()) == classtable->map_symbol_to_class.end()) {
+                classtable->semant_error(current_method) << "Undefined return type " << current_method->get_return_type() << " in method " << current_method->get_name() << "." << endl;
+            }
+            // Symbol body_expr_return_type = current_method->get_expr()->type_check(classtable);
+            // if (body_expr_return_type == SELF_TYPE) {
+            //     body_expr_return_type = current_class_name;
+            // }
+        }
+    }
+    object_name_to_type_table.exitscope();
+}
+
+void formal_class::type_check(ClassTable* classtable) {
+    if (type_decl == SELF_TYPE) {
+        classtable->semant_error(this) << "Formal parameter " << name << " cannot have type SELF_TYPE." << endl;
+    }else if (classtable->map_symbol_to_class.find(type_decl) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Class " << type_decl << " of formal parameter " << name << " is undefined." << endl;
+    }
+
+    if (name == self) {
+        classtable->semant_error(this) << "'self' cannot be the name of a formal parameter." << endl;
+    } else if (object_name_to_type_table.probe(name)) {
+        classtable->semant_error(this) << "Formal parameter " << name << " is multiply defined." << endl;
+    } else {
+        object_name_to_type_table.addid(name, &type_decl);
+    }
 }

@@ -423,7 +423,12 @@ ostream& ClassTable::semant_error()
     return error_stream;
 } 
 
-
+Symbol get_instan_self_type(Symbol type_name) {
+    if (type_name == SELF_TYPE) {
+        return current_class_name;
+    }
+    return type_name;
+}
 
 /*   This is the entry point to the semantic checker.
 
@@ -477,40 +482,61 @@ void program_class::semant()
 }
 
 void class__class::type_check(ClassTable* classtable) {
-    current_class_name = name;
     object_name_to_type_table.enterscope();
+    current_class_name = name;
     for (auto& e : map_class_to_map_attr_to_type[name]) {
         object_name_to_type_table.addid(e.first, &(e.second));
     }
-    
-    for (int index_feature = get_features()->first(); get_features()->more(index_feature); index_feature = get_features()->next(index_feature)) {
-        Feature current_feature = get_features()->nth(index_feature);
+    for (int index_feature = features->first(); features->more(index_feature); index_feature = features->next(index_feature)) {
+        Feature current_feature = features->nth(index_feature);
         method_class* current_method = dynamic_cast<method_class*>(current_feature);
         attr_class* current_attr = dynamic_cast<attr_class*>(current_feature);
         if ((current_method && current_attr) || (!current_method && !current_attr)) {
             assert(0 && "Bad feature ptr!");
         }
         if (current_method) {
-            object_name_to_type_table.enterscope();
-            object_name_to_type_table.addid(self, &SELF_TYPE);
-            for (int index_formal = current_method->get_formals()->first(); current_method->get_formals()->more(index_formal); index_formal = current_method->get_formals()->next(index_formal)) {
-                Formal current_formal = current_method->get_formals()->nth(index_formal);
-                current_formal->type_check(classtable);
-            }
-            if (classtable->map_symbol_to_class.find(current_method->get_return_type()) == classtable->map_symbol_to_class.end()) {
-                classtable->semant_error(current_method) << "Undefined return type " << current_method->get_return_type() << " in method " << current_method->get_name() << "." << endl;
-            }
-            Symbol body_expr_return_type = current_method->get_expr()->type_check(classtable);
-            if (body_expr_return_type == SELF_TYPE) {
-                body_expr_return_type = current_class_name;
-            }
-            if ((classtable->map_symbol_to_class.find(current_method->get_return_type()) != classtable->map_symbol_to_class.end())
-                && (classtable->map_symbol_to_class.find(body_expr_return_type) != classtable->map_symbol_to_class.end()))
-            {
-                if (class_tree_handler->get_lca(current_method->get_return_type(), body_expr_return_type) != current_method->get_return_type()) {
-                    classtable->semant_error(current_method) << "Inferred return type " << body_expr_return_type << " of method " << current_method->get_name() << " does not conform to declared return type " << current_method->get_return_type() << "." << endl;
-                }
-            }
+            current_method->type_check(classtable);
+        } else if (current_attr) {
+            current_attr->type_check(classtable);
+        }
+    }
+    object_name_to_type_table.exitscope();
+}
+
+void method_class::type_check(ClassTable* classtable) {
+    object_name_to_type_table.enterscope();
+    object_name_to_type_table.addid(self, &SELF_TYPE);
+    for (int index_formal = get_formals()->first(); get_formals()->more(index_formal); index_formal = get_formals()->next(index_formal)) {
+        Formal current_formal = get_formals()->nth(index_formal);
+        current_formal->type_check(classtable);
+    }
+    Symbol instan_return_type = get_instan_self_type(return_type);
+    if (classtable->map_symbol_to_class.find(instan_return_type) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Undefined return type " << instan_return_type << " in method " << name << "." << endl;
+    }
+    Symbol body_expr_return_type = expr->type_check(classtable);
+    if ((classtable->map_symbol_to_class.find(instan_return_type) != classtable->map_symbol_to_class.end())
+        && (classtable->map_symbol_to_class.find(get_instan_self_type(body_expr_return_type)) != classtable->map_symbol_to_class.end()))
+    {
+        if (class_tree_handler->get_lca(instan_return_type, get_instan_self_type(body_expr_return_type)) != instan_return_type) {
+            classtable->semant_error(this) << "Inferred return type " << body_expr_return_type << " of method " << name << " does not conform to declared return type " << return_type << "." << endl;
+        }
+    }
+    object_name_to_type_table.exitscope();
+}
+
+void attr_class::type_check(ClassTable* classtable) {
+    object_name_to_type_table.enterscope();
+    object_name_to_type_table.addid(self, &SELF_TYPE);
+    if (classtable->map_symbol_to_class.find(get_instan_self_type(type_decl)) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Class " << type_decl << " of attribute " << name << " is undefined." << endl;
+    }
+    Symbol init_expr_type = init->type_check(classtable);
+    if ((classtable->map_symbol_to_class.find(get_instan_self_type(type_decl)) != classtable->map_symbol_to_class.end())
+        && (classtable->map_symbol_to_class.find(get_instan_self_type(init_expr_type)) != classtable->map_symbol_to_class.end()))
+    {
+        if (class_tree_handler->get_lca(get_instan_self_type(type_decl), get_instan_self_type(init_expr_type)) != get_instan_self_type(type_decl)) {
+            classtable->semant_error(this) << "Inferred type " << init_expr_type << " of initialization of attribute " << name << " does not conform to declared type " << type_decl << "." << endl;
         }
     }
     object_name_to_type_table.exitscope();
@@ -530,6 +556,65 @@ void formal_class::type_check(ClassTable* classtable) {
     } else {
         object_name_to_type_table.addid(name, &type_decl);
     }
+}
+
+Symbol typcase_class::type_check(ClassTable* classtable) {
+    expr->type_check(classtable);
+    std::vector<Symbol> cases_types;
+    for (int index_case = cases->first(); cases->more(index_case); index_case = cases->next(index_case)) {
+        cases_types.push_back(cases->nth(index_case)->type_check(classtable));
+    }
+    return class_tree_handler->get_lca_wrapper(cases_types);
+}
+
+Symbol branch_class::type_check(ClassTable* classtable) {
+    object_name_to_type_table.enterscope();
+    if (classtable->map_symbol_to_class.find(type_decl) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Class " << type_decl << " of case branch is undefined." << endl;
+    }
+    object_name_to_type_table.addid(name, &type_decl);
+    expr->type_check(classtable);
+    object_name_to_type_table.exitscope();
+}
+
+Symbol dispatch_class::type_check(ClassTable* classtable) {
+    Symbol result_type = No_type;
+    Symbol expr_type = expr->type_check(classtable);
+    std::vector<Symbol> arguments_types;
+    for (int index_argument = actual->first(); actual->more(index_argument); index_argument = actual->next(index_argument)) {
+        arguments_types.push_back(actual->nth(index_argument)->type_check(classtable));
+    }
+    if (classtable->map_symbol_to_class.find(get_instan_self_type(expr_type)) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Dispatch on undefined class " << expr_type << "." << endl;
+    } else {
+        auto& map_method_types = map_class_to_map_method_to_types[get_instan_self_type(expr_type)];
+        if (map_method_types.find(name) == map_method_types.end()) {
+            classtable->semant_error(this) << "Dispatch to undefined method " << name << "." << endl;
+        } else {
+            auto& method_types = map_method_types[name];
+            result_type = get_instan_self_type(method_types.first);
+            if (arguments_types.size() != (method_types.second)->len()) {
+                classtable->semant_error(this) << "Method " << name << " called with wrong number of arguments." << endl;
+            } else {
+                for (int index_parameter = method_types.second->first(); method_types.second->more(index_parameter); index_parameter = method_types.second->next(index_parameter)) {
+                    Symbol argument_type = arguments_types[index_parameter];
+                    Symbol parameter_type = method_types.second->nth(index_parameter)->get_type_decl();
+                    Symbol parameter_name = method_types.second->nth(index_parameter)->get_name();
+                    if (classtable->map_symbol_to_class.find(argument_type) != classtable->map_symbol_to_class.end()
+                        && classtable->map_symbol_to_class.find(parameter_type) != classtable->map_symbol_to_class.end())
+                    {
+                        if (class_tree_handler->get_lca(parameter_type, argument_type) != parameter_type) {
+                            classtable->semant_error(this) << "In call of method " << name << ", type " << argument_type << " of parameter " << parameter_name << " does not conform to declared type " << parameter_type "." << endl;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (result_type == No_type) {
+        result_type = Object;
+    }
+    return result_type;
 }
 
 Symbol int_const_class::type_check(ClassTable* classtable) {

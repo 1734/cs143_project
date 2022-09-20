@@ -167,6 +167,22 @@ public:
     return ancestor[node1][0];
   }
 
+  // This is a wrapper for get_lca.
+  // If there exists no known node in the parameter nodes, the result is the last class name in nodes.
+  // If there exist(s) known node(s) in the parameter nodes, the result is lca of these known nodes.
+  T get_lca_wrapper(const std::vector<T>& nodes) {
+      assert(nodes.size()>=1 && "nodes.size() is smaller than 1!");
+      std::vector<T> known_nodes;
+      for (const auto& node : nodes) {
+          if (all_nodes.find(name) != all_nodes.end()) {
+              known_nodes.push_back(node);
+          }
+      }
+      if (known_nodes.empty()) {
+        return nodes.back();
+      }
+      return get_lca(known_nodes);
+  }
 };
 
 extern SymbolTable<Symbol, Symbol> object_name_to_type_table;

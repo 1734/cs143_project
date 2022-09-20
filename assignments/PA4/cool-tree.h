@@ -58,6 +58,7 @@ public:
 #ifdef Feature_EXTRAS
    Feature_EXTRAS
 #endif
+   virtual void type_check(ClassTable*) = 0;
 };
 
 
@@ -104,6 +105,7 @@ public:
 #ifdef Case_EXTRAS
    Case_EXTRAS
 #endif
+   virtual Symbol type_check(ClassTable*) = 0;
 };
 
 
@@ -210,7 +212,7 @@ public:
    Symbol get_name() { return name; }
    Formals get_formals() { return formals; }
    Symbol get_return_type() { return return_type; }
-   Expression get_expr() { return expr; }
+   virtual void type_check(ClassTable*);
 };
 
 
@@ -237,7 +239,7 @@ public:
 #endif
    Symbol get_name() { return name; }
    Symbol get_type_decl() { return type_decl; }
-   Expression get_init_expr() { return init; }
+   virtual void type_check(ClassTable*);
 };
 
 
@@ -260,8 +262,6 @@ public:
 #ifdef formal_EXTRAS
    formal_EXTRAS
 #endif
-   virtual Symbol get_name() { return name; }
-   virtual Symbol get_type_decl() { return type_decl; }
    virtual void type_check(ClassTable*);
 };
 
@@ -287,6 +287,7 @@ public:
 #ifdef branch_EXTRAS
    branch_EXTRAS
 #endif
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -361,7 +362,7 @@ public:
 #ifdef dispatch_EXTRAS
    dispatch_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -432,7 +433,7 @@ public:
 #ifdef typcase_EXTRAS
    typcase_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 

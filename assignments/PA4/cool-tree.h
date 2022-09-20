@@ -262,6 +262,8 @@ public:
 #ifdef formal_EXTRAS
    formal_EXTRAS
 #endif
+   virtual Symbol get_name() { return name; }
+   virtual Symbol get_type_decl() { return type_decl; }
    virtual void type_check(ClassTable*);
 };
 
@@ -454,7 +456,7 @@ public:
 #ifdef block_EXTRAS
    block_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -808,7 +810,7 @@ public:
 #ifdef no_expr_EXTRAS
    no_expr_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 

@@ -532,7 +532,8 @@ void attr_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Class " << type_decl << " of attribute " << name << " is undefined." << endl;
     }
     Symbol init_expr_type = init->type_check(classtable);
-    if ((classtable->map_symbol_to_class.find(get_instan_self_type(type_decl)) != classtable->map_symbol_to_class.end())
+    if ( init_expr_type != No_class /* No_class means the expr type is no_expr_class, e.g. the init expr is empty. */
+        && (classtable->map_symbol_to_class.find(get_instan_self_type(type_decl)) != classtable->map_symbol_to_class.end())
         && (classtable->map_symbol_to_class.find(get_instan_self_type(init_expr_type)) != classtable->map_symbol_to_class.end()))
     {
         if (class_tree_handler->get_lca(get_instan_self_type(type_decl), get_instan_self_type(init_expr_type)) != get_instan_self_type(type_decl)) {
@@ -573,8 +574,9 @@ Symbol branch_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Class " << type_decl << " of case branch is undefined." << endl;
     }
     object_name_to_type_table.addid(name, &type_decl);
-    expr->type_check(classtable);
+    Symbol result_type = expr->type_check(classtable);
     object_name_to_type_table.exitscope();
+    return result_type;
 }
 
 Symbol dispatch_class::type_check(ClassTable* classtable) {
@@ -593,7 +595,7 @@ Symbol dispatch_class::type_check(ClassTable* classtable) {
         } else {
             auto& method_types = map_method_types[name];
             result_type = get_instan_self_type(method_types.first);
-            if (arguments_types.size() != (method_types.second)->len()) {
+            if (arguments_types.size() != (std::vector<Entry*>::size_type)(method_types.second)->len()) {
                 classtable->semant_error(this) << "Method " << name << " called with wrong number of arguments." << endl;
             } else {
                 for (int index_parameter = method_types.second->first(); method_types.second->more(index_parameter); index_parameter = method_types.second->next(index_parameter)) {
@@ -604,7 +606,7 @@ Symbol dispatch_class::type_check(ClassTable* classtable) {
                         && classtable->map_symbol_to_class.find(parameter_type) != classtable->map_symbol_to_class.end())
                     {
                         if (class_tree_handler->get_lca(parameter_type, argument_type) != parameter_type) {
-                            classtable->semant_error(this) << "In call of method " << name << ", type " << argument_type << " of parameter " << parameter_name << " does not conform to declared type " << parameter_type "." << endl;
+                            classtable->semant_error(this) << "In call of method " << name << ", type " << argument_type << " of parameter " << parameter_name << " does not conform to declared type " << parameter_type << "." << endl;
                         }
                     }
                 }
@@ -617,6 +619,18 @@ Symbol dispatch_class::type_check(ClassTable* classtable) {
     return result_type;
 }
 
+Symbol block_class::type_check(ClassTable* classtable) {
+    assert(body->len()>=1 && "Block body expressions number: body->len() is smaller than 1!");
+    for (int index_exp = body->first(); body->more(index_exp+1); index_exp = body->next(index_exp)) {
+        body->nth(index_exp)->type_check(classtable);
+    }
+    return body->nth(body->len()-1)->type_check(classtable);
+}
+
 Symbol int_const_class::type_check(ClassTable* classtable) {
     return Int;
+}
+
+Symbol no_expr_class::type_check(ClassTable* classtable) {
+    return No_class;
 }

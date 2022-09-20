@@ -138,10 +138,10 @@ public:
     T node_smallest_order = nodes[0];
     T node_largest_order = nodes[0];
     for (const auto& node : nodes) {
-      if(order[node] < node_smallest_order) {
-        node_smallest_order = order[node];
+      if(order[node] < order[node_smallest_order]) {
+        node_smallest_order = node;
       } else if (order[node] > order[node_largest_order]) {
-        node_largest_order = order[node];
+        node_largest_order = node;
       }
     }
     return get_lca(node_smallest_order, node_largest_order);
@@ -174,7 +174,7 @@ public:
       assert(nodes.size()>=1 && "nodes.size() is smaller than 1!");
       std::vector<T> known_nodes;
       for (const auto& node : nodes) {
-          if (all_nodes.find(name) != all_nodes.end()) {
+          if (father.find(node) != father.end()) {
               known_nodes.push_back(node);
           }
       }

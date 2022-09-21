@@ -13,20 +13,24 @@ Class A {
     helper : Helper;
     fun1() : Int1 {
         {
-(*            undefined_id.copy();
+            fun1();
+            self.fun1();
+
+            undefined_id.copy();
+            undefined_id.undefined_fun();
             (new Object).undefined_fun();
             (new A).undefined_fun();
 
-            fun_check_argument_number();
-            fun_check_argument_number(1);
-            fun_check_argument_number(1,2,3,4);
+            helper.check_argument_number();
+            helper.check_argument_number(1);
+            helper.check_argument_number(1,2,3,4);
 
             helper.check_type(
                 undefined_id.undefined_fun());
             helper.check_type(
                 (new Object).undefined_fun());
             helper.check_type(
-                (new A).undefined_fun());*)
+                (new A).undefined_fun());
             helper.check_type(
                 helper.check_argument_number(1,2,3,4));
         }

@@ -312,7 +312,7 @@ public:
 #ifdef assign_EXTRAS
    assign_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+    virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -339,7 +339,7 @@ public:
 #ifdef static_dispatch_EXTRAS
    static_dispatch_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -483,7 +483,7 @@ public:
 #ifdef let_EXTRAS
    let_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -728,7 +728,7 @@ public:
 #ifdef bool_const_EXTRAS
    bool_const_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -770,7 +770,7 @@ public:
 #ifdef new__EXTRAS
    new__EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 
@@ -831,7 +831,7 @@ public:
 #ifdef object_EXTRAS
    object_EXTRAS
 #endif
-//    virtual Symbol type_check(ClassTable*);
+   virtual Symbol type_check(ClassTable*);
 };
 
 

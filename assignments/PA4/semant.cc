@@ -423,11 +423,22 @@ ostream& ClassTable::semant_error()
     return error_stream;
 } 
 
-Symbol get_instan_self_type(Symbol type_name) {
+Symbol& get_instan_self_type(Symbol& type_name) {
     if (type_name == SELF_TYPE) {
         return current_class_name;
     }
     return type_name;
+}
+
+bool ClassTable::no_conform_to(Symbol ancestor_class_name, Symbol child_class_name) {
+    if (class_tree_handler
+        && (map_symbol_to_class.find(get_instan_self_type(ancestor_class_name)) != map_symbol_to_class.end())
+        && (map_symbol_to_class.find(get_instan_self_type(child_class_name)) != map_symbol_to_class.end())
+        && (class_tree_handler->get_lca(get_instan_self_type(ancestor_class_name), get_instan_self_type(child_class_name)) != get_instan_self_type(ancestor_class_name))
+    ) {
+        return true;
+    }
+    return false;
 }
 
 /*   This is the entry point to the semantic checker.
@@ -515,12 +526,8 @@ void method_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Undefined return type " << instan_return_type << " in method " << name << "." << endl;
     }
     Symbol body_expr_return_type = expr->type_check(classtable);
-    if ((classtable->map_symbol_to_class.find(instan_return_type) != classtable->map_symbol_to_class.end())
-        && (classtable->map_symbol_to_class.find(get_instan_self_type(body_expr_return_type)) != classtable->map_symbol_to_class.end()))
-    {
-        if (class_tree_handler->get_lca(instan_return_type, get_instan_self_type(body_expr_return_type)) != instan_return_type) {
-            classtable->semant_error(this) << "Inferred return type " << body_expr_return_type << " of method " << name << " does not conform to declared return type " << return_type << "." << endl;
-        }
+    if (classtable->no_conform_to(return_type, body_expr_return_type)) {
+        classtable->semant_error(this) << "Inferred return type " << body_expr_return_type << " of method " << name << " does not conform to declared return type " << return_type << "." << endl;
     }
     object_name_to_type_table.exitscope();
 }
@@ -532,13 +539,8 @@ void attr_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Class " << type_decl << " of attribute " << name << " is undefined." << endl;
     }
     Symbol init_expr_type = init->type_check(classtable);
-    if ( init_expr_type != No_class /* No_class means the expr type is no_expr_class, e.g. the init expr is empty. */
-        && (classtable->map_symbol_to_class.find(get_instan_self_type(type_decl)) != classtable->map_symbol_to_class.end())
-        && (classtable->map_symbol_to_class.find(get_instan_self_type(init_expr_type)) != classtable->map_symbol_to_class.end()))
-    {
-        if (class_tree_handler->get_lca(get_instan_self_type(type_decl), get_instan_self_type(init_expr_type)) != get_instan_self_type(type_decl)) {
-            classtable->semant_error(this) << "Inferred type " << init_expr_type << " of initialization of attribute " << name << " does not conform to declared type " << type_decl << "." << endl;
-        }
+    if (init_expr_type != No_class /* No_class means the expr type is no_expr_class, e.g. the init expr is empty. */ && classtable->no_conform_to(type_decl, init_expr_type)) {
+        classtable->semant_error(this) << "Inferred type " << init_expr_type << " of initialization of attribute " << name << " does not conform to declared type " << type_decl << "." << endl;
     }
     object_name_to_type_table.exitscope();
 }
@@ -602,10 +604,49 @@ Symbol dispatch_class::type_check(ClassTable* classtable) {
                     Symbol argument_type = arguments_types[index_parameter];
                     Symbol parameter_type = method_types.second->nth(index_parameter)->get_type_decl();
                     Symbol parameter_name = method_types.second->nth(index_parameter)->get_name();
-                    if (classtable->map_symbol_to_class.find(argument_type) != classtable->map_symbol_to_class.end()
-                        && classtable->map_symbol_to_class.find(parameter_type) != classtable->map_symbol_to_class.end())
-                    {
-                        if (class_tree_handler->get_lca(parameter_type, argument_type) != parameter_type) {
+                    if (classtable->no_conform_to(parameter_type, argument_type)) {
+                        classtable->semant_error(this) << "In call of method " << name << ", type " << argument_type << " of parameter " << parameter_name << " does not conform to declared type " << parameter_type << "." << endl;
+                    }
+                }
+            }
+        }
+    }
+    if (result_type == No_type) {
+        result_type = Object;
+    }
+    return result_type;
+}
+
+Symbol static_dispatch_class::type_check(ClassTable* classtable) {
+    Symbol result_type = No_type;
+    Symbol expr_type = expr->type_check(classtable);
+    std::vector<Symbol> arguments_types;
+    for (int index_argument = actual->first(); actual->more(index_argument); index_argument = actual->next(index_argument)) {
+        arguments_types.push_back(actual->nth(index_argument)->type_check(classtable));
+    }
+    if (type_name == SELF_TYPE) {
+        classtable->semant_error(this) << "Static dispatch to SELF_TYPE." << endl;
+    }
+    else if (classtable->map_symbol_to_class.find(type_name) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Static dispatch to undefined class " << type_name << "." << endl;
+    } else {
+        if (classtable->no_conform_to(type_name, expr_type)) {
+            classtable->semant_error(this) << "Expression type " << expr_type << " does not conform to declared static dispatch type " << type_name << "." << endl;
+        } else {
+            auto& map_method_types = map_class_to_map_method_to_types[type_name];
+            if (map_method_types.find(name) == map_method_types.end()) {
+                classtable->semant_error(this) << "Static dispatch to undefined method " << name << "." << endl;
+            } else {
+                auto& method_types = map_method_types[name];
+                result_type = get_instan_self_type(method_types.first);
+                if (arguments_types.size() != (std::vector<Entry*>::size_type)(method_types.second)->len()) {
+                    classtable->semant_error(this) << "Method " << name << " invoked with wrong number of arguments." << endl;
+                } else {
+                    for (int index_parameter = method_types.second->first(); method_types.second->more(index_parameter); index_parameter = method_types.second->next(index_parameter)) {
+                        Symbol argument_type = arguments_types[index_parameter];
+                        Symbol parameter_type = method_types.second->nth(index_parameter)->get_type_decl();
+                        Symbol parameter_name = method_types.second->nth(index_parameter)->get_name();
+                        if (classtable->no_conform_to(parameter_type, argument_type)) {
                             classtable->semant_error(this) << "In call of method " << name << ", type " << argument_type << " of parameter " << parameter_name << " does not conform to declared type " << parameter_type << "." << endl;
                         }
                     }
@@ -627,10 +668,61 @@ Symbol block_class::type_check(ClassTable* classtable) {
     return body->nth(body->len()-1)->type_check(classtable);
 }
 
+Symbol let_class::type_check(ClassTable* classtable) {
+    object_name_to_type_table.enterscope();
+    if (classtable->map_symbol_to_class.find(get_instan_self_type(type_decl)) == classtable->map_symbol_to_class.end()) {
+        classtable->semant_error(this) << "Class " << type_decl << " of let-bound identifier " << identifier << " is undefined." << endl;
+    }
+    Symbol init_type = init->type_check(classtable);
+    if (init_type != No_class /* No_class means the expr type is no_expr_class, e.g. the init expr is empty. */ && classtable->no_conform_to(type_decl, init_type)) {
+        classtable->semant_error(this) << "Inferred type " << init_type << " of initialization of " << identifier << " does not conform to identifier's declared type " << type_decl << "." << endl;
+    }
+    if (identifier == self) {
+        classtable->semant_error(this) << "'self' cannot be bound in a 'let' expression." << endl;
+    } else {
+        object_name_to_type_table.addid(identifier, &(get_instan_self_type(type_decl)));
+    }
+    Symbol result_type = body->type_check(classtable);
+    object_name_to_type_table.exitscope();
+    return result_type;
+}
+
+Symbol new__class::type_check(ClassTable*) {
+    return type_name;
+}
+
+Symbol object_class::type_check(ClassTable* classtable) {
+    Symbol* object_type_ptr = object_name_to_type_table.lookup(name);
+    if (object_type_ptr == NULL) {
+        classtable->semant_error(this) << "Undeclared identifier " << name << "." << endl;
+        return Object;
+    }
+    return *object_type_ptr;
+}
+
 Symbol int_const_class::type_check(ClassTable* classtable) {
     return Int;
 }
 
+Symbol bool_const_class::type_check(ClassTable* classtable) {
+    return Bool;
+}
+
 Symbol no_expr_class::type_check(ClassTable* classtable) {
     return No_class;
+}
+
+Symbol assign_class::type_check(ClassTable* classtable) {
+    if (name == self) {
+        classtable->semant_error(this) << "Cannot assign to 'self'." << endl;
+    }
+    Symbol* var_type_ptr = object_name_to_type_table.lookup(name);
+    if (var_type_ptr == NULL) {
+        classtable->semant_error(this) << "Assignment to undeclared variable " << name << "." << endl;
+    }
+    Symbol expr_type = expr->type_check(classtable);
+    if (var_type_ptr && classtable->no_conform_to(*var_type_ptr, expr_type)) {
+        classtable->semant_error(this) << "Type " << expr_type << " of assigned expression does not conform to declared type " << *var_type_ptr << " of identifier " << name << "." << endl;
+    }
+    return expr_type;
 }

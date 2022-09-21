@@ -53,6 +53,8 @@ public:
 
   void check_main();
 
+  bool no_conform_to(Symbol, Symbol);
+
 };
 
 template<class T>
@@ -182,6 +184,10 @@ public:
         return nodes.back();
       }
       return get_lca(known_nodes);
+  }
+
+  bool get_initialized_flag() {
+    return initialized_flag;
   }
 };
 

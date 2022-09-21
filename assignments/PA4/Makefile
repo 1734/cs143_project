@@ -61,6 +61,8 @@ dotest:	semant good.cl bad.cl
 	-./mysemant good.cl
 	@echo "\nRunning semantic checker on bad.cl\n"
 	-./mysemant bad.cl
+	@echo "\nRunning semantic checker on test folder\n"
+	-./test_all.sh
 
 ${LIBS}:
 	${CLASSDIR}/etc/link-object ${ASSN} $@

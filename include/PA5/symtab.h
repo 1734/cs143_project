@@ -125,7 +125,6 @@ public:
    // Lookup an item through all scopes of the symbol table.  If found
    // it returns the associated information field, if not it returns
    // NULL.
-
    DAT * lookup(SYM s)
    {
        for(ScopeList *i = tbl; i != NULL; i=i->tl()) {

@@ -58,11 +58,11 @@ symtab_example: symtab_example.cc
 
 dotest:	semant good.cl bad.cl
 	@echo "\nRunning semantic checker on good.cl\n"
-	-./mysemant good.cl
+	-./diff.sh good.cl
 	@echo "\nRunning semantic checker on bad.cl\n"
-	-./mysemant bad.cl
+	-./diff.sh bad.cl
 	@echo "\nRunning semantic checker on test folder\n"
-	-./test_all.sh
+	-find test -type f -name "test*.cl" | xargs -I{} ./diff.sh "{}"
 
 ${LIBS}:
 	${CLASSDIR}/etc/link-object ${ASSN} $@

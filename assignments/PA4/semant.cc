@@ -539,7 +539,7 @@ void attr_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Class " << type_decl << " of attribute " << name << " is undefined." << endl;
     }
     Symbol init_expr_type = init->type_check(classtable);
-    if (init_expr_type != No_class /* No_class means the expr type is no_expr_class, e.g. the init expr is empty. */ && classtable->no_conform_to(type_decl, init_expr_type)) {
+    if (init_expr_type != No_type /* No_type means the expr type is no_expr_class, e.g. the init expr is empty. */ && classtable->no_conform_to(type_decl, init_expr_type)) {
         classtable->semant_error(this) << "Inferred type " << init_expr_type << " of initialization of attribute " << name << " does not conform to declared type " << type_decl << "." << endl;
     }
     object_name_to_type_table.exitscope();
@@ -567,7 +567,9 @@ Symbol typcase_class::type_check(ClassTable* classtable) {
     for (int index_case = cases->first(); cases->more(index_case); index_case = cases->next(index_case)) {
         cases_types.push_back(cases->nth(index_case)->type_check(classtable));
     }
-    return class_tree_handler->get_lca_wrapper(cases_types);
+    Symbol result_type = class_tree_handler->get_lca_wrapper(cases_types);
+    set_type(result_type);
+    return result_type;
 }
 
 Symbol branch_class::type_check(ClassTable* classtable) {
@@ -614,6 +616,7 @@ Symbol dispatch_class::type_check(ClassTable* classtable) {
     if (result_type == No_type) {
         result_type = Object;
     }
+    set_type(result_type);
     return result_type;
 }
 
@@ -657,6 +660,7 @@ Symbol static_dispatch_class::type_check(ClassTable* classtable) {
     if (result_type == No_type) {
         result_type = Object;
     }
+    set_type(result_type);
     return result_type;
 }
 
@@ -665,7 +669,9 @@ Symbol block_class::type_check(ClassTable* classtable) {
     for (int index_exp = body->first(); body->more(index_exp+1); index_exp = body->next(index_exp)) {
         body->nth(index_exp)->type_check(classtable);
     }
-    return body->nth(body->len()-1)->type_check(classtable);
+    Symbol result_type = body->nth(body->len()-1)->type_check(classtable);
+    set_type(result_type);
+    return result_type;
 }
 
 Symbol let_class::type_check(ClassTable* classtable) {
@@ -674,7 +680,7 @@ Symbol let_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Class " << type_decl << " of let-bound identifier " << identifier << " is undefined." << endl;
     }
     Symbol init_type = init->type_check(classtable);
-    if (init_type != No_class /* No_class means the expr type is no_expr_class, e.g. the init expr is empty. */ && classtable->no_conform_to(type_decl, init_type)) {
+    if (init_type != No_type /* No_type means the expr type is no_expr_class, e.g. the init expr is empty. */ && classtable->no_conform_to(type_decl, init_type)) {
         classtable->semant_error(this) << "Inferred type " << init_type << " of initialization of " << identifier << " does not conform to identifier's declared type " << type_decl << "." << endl;
     }
     if (identifier == self) {
@@ -688,6 +694,7 @@ Symbol let_class::type_check(ClassTable* classtable) {
 }
 
 Symbol new__class::type_check(ClassTable*) {
+    set_type(type_name);
     return type_name;
 }
 
@@ -697,19 +704,28 @@ Symbol object_class::type_check(ClassTable* classtable) {
         classtable->semant_error(this) << "Undeclared identifier " << name << "." << endl;
         return Object;
     }
+    set_type(*object_type_ptr);
     return *object_type_ptr;
 }
 
-Symbol int_const_class::type_check(ClassTable* classtable) {
-    return Int;
-}
-
 Symbol bool_const_class::type_check(ClassTable* classtable) {
+    set_type(Bool);
     return Bool;
 }
 
+Symbol int_const_class::type_check(ClassTable* classtable) {
+    set_type(Int);
+    return Int;
+}
+
+Symbol string_const_class::type_check(ClassTable* classtable) {
+    set_type(Str);
+    return Str;
+}
+
 Symbol no_expr_class::type_check(ClassTable* classtable) {
-    return No_class;
+    set_type(No_type);
+    return No_type;
 }
 
 Symbol assign_class::type_check(ClassTable* classtable) {
@@ -724,5 +740,121 @@ Symbol assign_class::type_check(ClassTable* classtable) {
     if (var_type_ptr && classtable->no_conform_to(*var_type_ptr, expr_type)) {
         classtable->semant_error(this) << "Type " << expr_type << " of assigned expression does not conform to declared type " << *var_type_ptr << " of identifier " << name << "." << endl;
     }
+    set_type(expr_type);
     return expr_type;
+}
+
+Symbol cond_class::type_check(ClassTable* classtable) {
+    if (pred->type_check(classtable) != Bool) {
+        classtable->semant_error(this) << "Predicate of 'if' does not have type Bool." << endl;
+    }
+    Symbol then_exp_type = then_exp->type_check(classtable);
+    Symbol else_exp_type = else_exp->type_check(classtable);
+    Symbol result_type = class_tree_handler->get_lca_wrapper({then_exp_type, else_exp_type});
+    return result_type;
+}
+
+Symbol loop_class::type_check(ClassTable* classtable) {
+    if (pred->type_check(classtable) != Bool) {
+        classtable->semant_error(this) << "Loop condition does not have type Bool." << endl;
+    }
+    body->type_check(classtable);
+    set_type(Object);
+    return Object;
+}
+
+Symbol plus_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if (e1_type != Int || e2_type != Int) {
+        classtable->semant_error(this) << "non-Int arguments: " << e1_type << " + " << e2_type << endl;
+    }
+    set_type(Int);
+    return Int;
+}
+
+Symbol sub_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if (e1_type != Int || e2_type != Int) {
+        classtable->semant_error(this) << "non-Int arguments: " << e1_type << " - " << e2_type << endl;
+    }
+    set_type(Int);
+    return Int;
+}
+
+Symbol mul_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if (e1_type != Int || e2_type != Int) {
+        classtable->semant_error(this) << "non-Int arguments: " << e1_type << " * " << e2_type << endl;
+    }
+    set_type(Int);
+    return Int;
+}
+
+Symbol divide_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if (e1_type != Int || e2_type != Int) {
+        classtable->semant_error(this) << "non-Int arguments: " << e1_type << " / " << e2_type << endl;
+    }
+    set_type(Int);
+    return Int;
+}
+
+Symbol neg_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    if (e1_type != Int) {
+        classtable->semant_error(this) << "Argument of '~' has type " << e1_type << " instead of Int." << endl;
+    }
+    set_type(Int);
+    return Int;
+}
+
+Symbol lt_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if (e1_type != Int || e2_type != Int) {
+        classtable->semant_error(this) << "non-Int arguments: " << e1_type << " < " << e2_type << endl;
+    }
+    set_type(Bool);
+    return Bool;
+}
+
+Symbol leq_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if (e1_type != Int || e2_type != Int) {
+        classtable->semant_error(this) << "non-Int arguments: " << e1_type << " <= " << e2_type << endl;
+    }
+    set_type(Bool);
+    return Bool;
+}
+
+Symbol eq_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    Symbol e2_type = e2->type_check(classtable);
+    if ((e1_type == Int || e2_type == Int || e1_type == Str || e2_type == Str || e1_type == Bool || e2_type == Bool)
+        && e1_type != e2_type)
+    {
+        classtable->semant_error(this) << "Illegal comparison with a basic type." << endl;
+    }
+    set_type(Bool);
+    return Bool;
+}
+
+Symbol comp_class::type_check(ClassTable* classtable) {
+    Symbol e1_type = e1->type_check(classtable);
+    if (e1_type != Bool) {
+        classtable->semant_error(this) << "Argument of 'not' has type " << e1_type << " instead of Bool." << endl;
+    }
+    set_type(Bool);
+    return Bool;
+}
+
+Symbol isvoid_class::type_check(ClassTable* classtable) {
+    e1->type_check(classtable);
+    set_type(Bool);
+    return Bool;
 }

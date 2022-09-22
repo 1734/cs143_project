@@ -6,6 +6,7 @@ class C {
 		a <- x;
 		b <- y;
 		self;
+		new SELF_TYPE;
            }
 	};
 };

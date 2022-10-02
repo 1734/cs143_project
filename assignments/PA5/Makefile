@@ -53,6 +53,9 @@ cgen:	${OBJS} parser semant
 dotest:	cgen example.cl
 	@echo "\nRunning code generator on example.cl\n"
 	-./mycoolc example.cl
+	-../../bin/coolc -o test/aaa1.s test/t3.cl
+	-./mycoolc -o test/aaa2.s test/t3.cl
+	-code --diff test/aaa1.s test/aaa2.s
 
 ${LIBS}:
 	${CLASSDIR}/etc/link-object ${ASSN} $@

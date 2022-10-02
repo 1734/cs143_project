@@ -25,6 +25,12 @@
 #include "cgen.h"
 #include "cgen_gc.h"
 
+std::map<Symbol, std::vector<Symbol>> class_method_order;
+std::map<Symbol, T_map_method> class_method_to_index_class;
+
+std::map<Symbol, std::vector<Symbol>> class_attr_order;
+std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
+
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
@@ -404,7 +410,7 @@ void StringEntry::code_def(ostream& s, int stringclasstag)
 
  /***** Add dispatch information for class String ******/
 
-      s << endl;                                              // dispatch table
+      s << STRINGNAME << DISPTAB_SUFFIX << endl;                                              // dispatch table
       s << WORD;  lensym->code_ref(s);  s << endl;            // string length
   emit_string_constant(s,str);                                // ascii string
   s << ALIGN;                                                 // align to word
@@ -446,7 +452,7 @@ void IntEntry::code_def(ostream &s, int intclasstag)
 
  /***** Add dispatch information for class Int ******/
 
-      s << endl;                                          // dispatch table
+      s << INTNAME << DISPTAB_SUFFIX << endl;                                          // dispatch table
       s << WORD << str << endl;                           // integer value
 }
 
@@ -490,7 +496,7 @@ void BoolConst::code_def(ostream& s, int boolclasstag)
 
  /***** Add dispatch information for class Bool ******/
 
-      s << endl;                                            // dispatch table
+      s << BOOLNAME << DISPTAB_SUFFIX << endl;                                            // dispatch table
       s << WORD << val << endl;                             // value (0 or 1)
 }
 
@@ -589,6 +595,63 @@ void CgenClassTable::code_select_gc()
   str << WORD << (cgen_Memmgr_Test == GC_TEST) << endl;
 }
 
+void CgenClassTable::code_class_nameTab()
+{
+  str << CLASSNAMETAB << LABEL;
+  for (Symbol class_name : class_name_table_vector) {
+    str << WORD;
+    (stringtable.lookup_string(class_name->get_string()))->code_ref(str);
+    str << endl;
+  }
+}
+
+void CgenClassTable::code_class_objTab()
+{
+  str << CLASSOBJTAB << LABEL;
+  for (Symbol class_name : class_name_table_vector) {
+    str << WORD << class_name << PROTOBJ_SUFFIX << endl;
+    str << WORD << class_name << CLASSINIT_SUFFIX << endl;
+  }
+}
+
+void CgenClassTable::code_class_dispTabs()
+{
+  for (Symbol class_name : class_name_table_vector) {
+    str << class_name << DISPTAB_SUFFIX << LABEL;
+    for (Symbol method_name : class_method_order[class_name]) {
+      str << WORD << class_method_to_index_class[class_name][method_name].second << "." << method_name << endl;
+    }
+  }
+}
+
+void CgenClassTable::code_protObjs()
+{
+  for (Symbol class_name : class_name_table_vector) {
+    str << class_name << PROTOBJ_SUFFIX << LABEL;
+    str << WORD << class_tag_table[class_name] << endl;
+    str << WORD << class_attr_order[class_name].size()+3 << endl;
+    str << WORD << class_name << DISPTAB_SUFFIX << endl;
+    for (Symbol attr_name : class_attr_order[class_name]) {
+      Symbol current_attr_type = class_attr_to_index_type[class_name][attr_name].second;
+      if (current_attr_type == Int) {
+        str << WORD;
+        inttable.lookup_string("0")->code_ref(str); // default value of Int
+        str << endl;
+      } else if (current_attr_type == Bool) {
+        str << WORD;
+        falsebool.code_ref(str); // default value of Bool
+        str << endl;
+      } else if (current_attr_type == Str) {
+        str << WORD;
+        stringtable.lookup_string("")->code_ref(str); // default value of String
+        str << endl;
+      } else {
+        str << WORD << "0" << endl;
+      }
+    }
+    str << WORD << "-1" << endl;
+  }
+}
 
 //********************************************************
 //
@@ -619,21 +682,21 @@ void CgenClassTable::code_constants()
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
 {
-   stringclasstag = 0 /* Change to your String class tag here */;
-   intclasstag =    0 /* Change to your Int class tag here */;
-   boolclasstag =   0 /* Change to your Bool class tag here */;
+   stringclasstag = 5 /* Change to your String class tag here */;
+   intclasstag =    3 /* Change to your Int class tag here */;
+   boolclasstag =   4 /* Change to your Bool class tag here */;
 
    enterscope();
    if (cgen_debug) cout << "Building CgenClassTable" << endl;
-   install_basic_classes();
+   install_basic_classes(classes);
    install_classes(classes);
    build_inheritance_tree();
-
+   traverse_inheritance_tree_to_build();
    code();
    exitscope();
 }
 
-void CgenClassTable::install_basic_classes()
+void CgenClassTable::install_basic_classes(Classes cs)
 {
 
 // The tree package uses these globals to annotate the classes built below.
@@ -702,6 +765,12 @@ void CgenClassTable::install_basic_classes()
 	   filename),	    
     Basic,this));
 
+  for(int i = cs->first(); cs->more(i); i = cs->next(i)) {
+    if (cs->nth(i)->get_name() == Main) {
+      install_class(new CgenNode(cs->nth(i),NotBasic,this));
+    }
+  }
+
 //
 // The Int class has no methods and only a single attribute, the
 // "val" for the integer. 
@@ -763,7 +832,9 @@ void CgenClassTable::install_basic_classes()
 void CgenClassTable::install_class(CgenNodeP nd)
 {
   Symbol name = nd->get_name();
-
+  stringtable.add_string(name->get_string());
+  class_name_table_vector.push_back(name);
+  class_tag_table[name] = current_class_tag++;
   if (probe(name))
     {
       return;
@@ -775,10 +846,14 @@ void CgenClassTable::install_class(CgenNodeP nd)
   addid(name,nd);
 }
 
+// Install all user defined classes but Main.
 void CgenClassTable::install_classes(Classes cs)
 {
-  for(int i = cs->first(); cs->more(i); i = cs->next(i))
-    install_class(new CgenNode(cs->nth(i),NotBasic,this));
+  for(int i = cs->first(); cs->more(i); i = cs->next(i)) {
+    if (cs->nth(i)->get_name() != Main) {
+      install_class(new CgenNode(cs->nth(i),NotBasic,this));
+    }
+  }
 }
 
 //
@@ -815,7 +890,63 @@ void CgenNode::set_parentnd(CgenNodeP p)
   parentnd = p;
 }
 
+void CgenClassTable::traverse_inheritance_tree_to_build()
+{
+  visit(root());
+}
 
+void CgenClassTable::visit(CgenNodeP nd)
+{
+  assert(nd != NULL);
+  Symbol current_class_name = nd->name;
+  Symbol parent_class_name = nd->get_parent();
+  Features current_features = nd->features;
+
+  std::vector<Symbol> current_method_order;
+  T_map_method current_method_to_index_class;
+  std::vector<Symbol> current_attr_order;
+  std::map<Symbol, std::pair<int, Symbol>> current_attr_to_index_type;
+  if (current_class_name != Object) {
+    current_method_order = class_method_order[parent_class_name];
+    current_method_to_index_class = class_method_to_index_class[parent_class_name];
+    current_attr_order = class_attr_order[parent_class_name];
+    current_attr_to_index_type = class_attr_to_index_type[parent_class_name];
+  }
+
+  for (int feature_index = current_features->first(); current_features->more(feature_index); feature_index = current_features->next(feature_index)) {
+    Feature current_feature = current_features->nth(feature_index);
+    method_class* current_method = dynamic_cast<method_class*>(current_feature);
+    attr_class* current_attr = dynamic_cast<attr_class*>(current_feature);
+    if ((current_method && current_attr) || (!current_method && !current_attr)) {
+        assert(0 && "Bad feature ptr!");
+    }
+    if (current_method) {
+      // Override parent method
+      if (std::find(current_method_order.begin(), current_method_order.end(), current_method->name) != current_method_order.end()) {
+        current_method_to_index_class[current_method->name].second = current_class_name;
+      } else {
+        current_method_to_index_class[current_method->name] = {current_method_order.size(), current_class_name};
+        current_method_order.push_back(current_method->name);
+      }
+    }
+    if (current_attr) {
+      current_attr_to_index_type[current_attr->name] = {current_attr_order.size(), current_attr->type_decl};
+      current_attr_order.push_back(current_attr->name);
+    }
+  }
+
+  class_method_order[current_class_name] = std::move(current_method_order);
+  class_method_to_index_class[current_class_name] = std::move(current_method_to_index_class);
+  class_attr_order[current_class_name] = std::move(current_attr_order);
+  class_attr_to_index_type[current_class_name] = std::move(current_attr_to_index_type);
+
+  List<CgenNode> *current_children_ptr = nd->get_children();
+  CgenNodeP current_child_ptr = NULL;
+  while(current_children_ptr && (current_child_ptr = current_children_ptr->hd())) {
+    visit(current_child_ptr);
+    current_children_ptr = current_children_ptr->tl();
+  }
+}
 
 void CgenClassTable::code()
 {
@@ -833,6 +964,14 @@ void CgenClassTable::code()
 //                   - class_nameTab
 //                   - dispatch tables
 //
+
+  code_class_nameTab();
+
+  code_class_objTab();
+
+  code_class_dispTabs();
+
+  code_protObjs();
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -862,9 +1001,7 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    parentnd(NULL),
    children(NULL),
    basic_status(bstatus)
-{ 
-   stringtable.add_string(name->get_string());          // Add class name to string table
-}
+{ }
 
 
 //******************************************************************

@@ -3,6 +3,17 @@
 #include "emit.h"
 #include "cool-tree.h"
 #include "symtab.h"
+#include <vector>
+#include <map>
+#include <algorithm>
+
+extern std::map<Symbol, std::vector<Symbol>> class_method_order;
+typedef std::pair<int, Symbol> T_index_class;
+typedef std::map<Symbol, T_index_class> T_map_method;
+extern std::map<Symbol, T_map_method> class_method_to_index_class;
+
+extern std::map<Symbol, std::vector<Symbol>> class_attr_order;
+extern std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
@@ -37,11 +48,21 @@ private:
 // a tree of `CgenNode', and class names are placed
 // in the base class symbol table.
 
-   void install_basic_classes();
+   void install_basic_classes(Classes cs);
    void install_class(CgenNodeP nd);
    void install_classes(Classes cs);
    void build_inheritance_tree();
    void set_relations(CgenNodeP nd);
+   void traverse_inheritance_tree_to_build();
+   void visit(CgenNodeP nd);
+
+   std::vector<Symbol> class_name_table_vector;
+   std::map<Symbol, int> class_tag_table;
+   int current_class_tag = 0;
+   void code_class_nameTab();
+   void code_class_objTab();
+   void code_class_dispTabs();
+   void code_protObjs();
 public:
    CgenClassTable(Classes, ostream& str);
    void code();
@@ -52,7 +73,7 @@ public:
 class CgenNode : public class__class {
 private: 
    CgenNodeP parentnd;                        // Parent of class
-   List<CgenNode> *children;                  // Children of class
+   List<CgenNode> *children = NULL;                  // Children of class
    Basicness basic_status;                    // `Basic' if class is basic
                                               // `NotBasic' otherwise
 

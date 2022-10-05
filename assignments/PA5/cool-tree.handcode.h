@@ -99,11 +99,15 @@ Expression set_type(Symbol s) { type = s; return this; } \
 virtual void code(ostream&) = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
-Expression_class() { type = (Symbol) NULL; }
+Expression_class() { type = (Symbol) NULL; } \
+int used_temp_number;                        \
+virtual int get_max_temp_number() { return 0; };
+
 
 #define Expression_SHARED_EXTRAS           \
 void code(ostream&); 			   \
-void dump_with_types(ostream&,int); 
+void dump_with_types(ostream&,int); \
+// virtual int get_max_temp_number();
 
 
 #endif

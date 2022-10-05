@@ -31,6 +31,9 @@ std::map<Symbol, T_map_method> class_method_to_index_class;
 std::map<Symbol, std::vector<Symbol>> class_attr_order;
 std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
+SymbolTable<Symbol, Addressing> id_to_location_table;
+static std::set<Addressing*> locations;
+
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
@@ -609,8 +612,12 @@ void CgenClassTable::code_class_objTab()
 {
   str << CLASSOBJTAB << LABEL;
   for (Symbol class_name : class_name_table_vector) {
-    str << WORD << class_name << PROTOBJ_SUFFIX << endl;
-    str << WORD << class_name << CLASSINIT_SUFFIX << endl;
+    str << WORD;
+    emit_protobj_ref(class_name, str);
+    str << endl;
+    str << WORD;
+    emit_init_ref(class_name, str);
+    str << endl;
   }
 }
 
@@ -651,6 +658,46 @@ void CgenClassTable::code_protObjs()
     }
     str << WORD << "-1" << endl;
   }
+}
+
+void CgenClassTable::code_object_initializer()
+{
+  for (Symbol class_name : class_name_table_vector) {
+    CgenNodeP current_class_gen_ptr = lookup(class_name);
+    Features current_features = current_class_gen_ptr->features;
+    Expressions init_assign_exprs = NULL;
+    for (int feature_index = current_features->first();; current_features->more(feature_index); feature_index = current_features->next(feature_index)) {
+      Feature current_feature = current_features->nth(feature_index);
+      attr_class* current_attr = dynamic_cast<attr_class*>(current_feature);
+      if (!current_attr || dynamic_cast<no_expr_class*>(current_attr->init)) {
+        continue;
+      }
+      if (init_assign_exprs == NULL) {
+        init_assign_exprs = single_Expressions(assign(current_attr->name, current_attr->init));
+      } else {
+        init_assign_exprs = append_Expressions(single_Expressions(assign(current_attr->name, current_attr->init)), init_assign_exprs);
+      }
+    }
+    Expression method_expr = init_assign_exprs ? block(init_assign_exprs) : no_expr();
+    int current_method_max_temp_number = method_expr->get_max_temp_number();
+    id_to_location_table.enterscope();
+    auto current_attr_to_index_type = class_attr_to_index_type[class_name];
+    for (Symbol attr_name : class_attr_order[class_name]) {
+      int attr_index = current_attr_to_index_type[attr_name].first;
+      int offset = (3+attr_index)*WORD_SIZE; // 0:class_tag 4:size 8:dispath_table 12:attr_0
+      id_to_location_table.addid(attr_name, (*locations.insert(new IndirectAddressing(SELF, offset)).first));
+    }
+    emit_addiu(SP, SP, -(3+current_method_max_temp_number)*WORD_SIZE, str); // move down SP. "3" stands for FP, self and return address
+    emit_store(FP, (3+current_method_max_temp_number)*WORD_SIZE, SP, str); // store old FP in current frame stack
+    emit_store(SELF, (2+current_method_max_temp_number)*WORD_SIZE, SP, str); // store old self object in current frame stack
+    emit_store(RA, (1+current_method_max_temp_number)*WORD_SIZE, SP, str); // store return address of current method in current frame stack
+    emit_addiu(FP, SP, WORD_SIZE, str); // FP = SP - 4
+    emit_move(SELF, ACC, str); // store current self in $s0
+    TempObjHandler temp_obj_handler(current_method_max_temp_number, 0);
+    temp_obj_handler.emit_temp_prepare(str);
+    str << JAL << current_class_gen_ptr->get_parent() << CLASSINIT_SUFFIX << endl;
+
+    id_to_location_table.exitscope();
 }
 
 //********************************************************
@@ -981,6 +1028,8 @@ void CgenClassTable::code()
 //                   - the class methods
 //                   - etc...
 
+  code_object_initializer();
+
 }
 
 
@@ -1095,4 +1144,10 @@ void no_expr_class::code(ostream &s) {
 void object_class::code(ostream &s) {
 }
 
-
+// emit the code for storing old $s1...$s6 to current frame stack
+void TempObjHandler::emit_temp_prepare(ostream &s) {
+  for (int i = 1; i <= std::max(6, max_temp_number); ++i) {
+    s << SW << "$s" << i << " " << (max_temp_number-1+i) * WORD_SIZE << "(" << FP << ")"
+      << endl;
+  }
+}

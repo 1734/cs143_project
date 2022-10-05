@@ -152,3 +152,5 @@ Instructions
 Write-up for PA5
 ----------------
 
+caller expr determines where the result of callee expr should be stored.
+callee expr determines whether new space should be applied for the result of itself.

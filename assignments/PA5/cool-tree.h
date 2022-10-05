@@ -194,6 +194,7 @@ public:
 #ifdef method_EXTRAS
    method_EXTRAS
 #endif
+   int max_temp_number;
 };
 
 

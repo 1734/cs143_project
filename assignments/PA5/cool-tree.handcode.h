@@ -96,7 +96,7 @@ void dump_with_types(ostream& ,int);
 Symbol type;                                 \
 Symbol get_type() { return type; }           \
 Expression set_type(Symbol s) { type = s; return this; } \
-virtual void code(ostream &s, const Addressing* result_loc, int method_max_temp_number, int used_temp_number) = 0; \
+virtual void code(ostream &s, Addressing* result_addr) = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
 Expression_class() { type = (Symbol) NULL; } \
@@ -104,7 +104,7 @@ virtual int get_max_temp_number() { return 0; };
 
 
 #define Expression_SHARED_EXTRAS           \
-void code(ostream &s, const Addressing* result_loc, int method_max_temp_number, int used_temp_number); 			   \
+void code(ostream &s, Addressing* result_addr); 			   \
 void dump_with_types(ostream&,int); \
 // virtual int get_max_temp_number();
 

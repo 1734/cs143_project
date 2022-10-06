@@ -16,6 +16,10 @@
 
 #include "list.h"
 
+extern int cgen_debug;
+class DirectAddressing;
+class IndirectAddressing;
+
 //
 // SymtabEnty<SYM,DAT> defines the entry for a symbol table that associates
 //    symbols of type `SYM' with data of type `DAT *'.  
@@ -159,6 +163,25 @@ public:
          cerr << "\nScope: \n";
          for(Scope *j = i->hd(); j != NULL; j = j->tl()) {
             cerr << "  " << j->hd()->get_id() << endl;
+         }
+      }
+   }
+   // Prints out the contents of the symbol table
+   void dump1()
+   {
+      if (!cgen_debug) {return;}
+      for(ScopeList *i = tbl; i != NULL; i = i->tl()) {
+         cerr << "Scope: \n";
+         for(Scope *j = i->hd(); j != NULL; j = j->tl()) {
+            cerr << "  " << j->hd()->get_id() << endl;
+            DirectAddressing* addr_ptr_direct = dynamic_cast<DirectAddressing*>(j->hd()->get_info());
+            IndirectAddressing* addr_ptr_indirect = dynamic_cast<IndirectAddressing*>(j->hd()->get_info());
+            if (addr_ptr_direct) {
+                cerr << "  " << addr_ptr_direct->get_reg_name() << endl;
+            }
+            if (addr_ptr_indirect) {
+                cerr << "  " << addr_ptr_indirect->get_reg_name() << " " << addr_ptr_indirect->get_offset() << endl;
+            }
          }
       }
    }

@@ -29,6 +29,9 @@ typedef CgenClassTable *CgenClassTableP;
 class CgenNode;
 typedef CgenNode *CgenNodeP;
 
+class TempObjHandler;
+extern TempObjHandler* temp_obj_handler_ptr;
+
 class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *nds;
@@ -116,10 +119,10 @@ public:
 class DirectAddressing : public Addressing
 {
 private:
-   std::string reg_name;
+   char* reg_name;
 public:
-   DirectAddressing(std::string reg_name_) : reg_name(reg_name_) {}
-   std::string get_reg_name() const { return reg_name; }
+   DirectAddressing(char* reg_name_);
+   char* get_reg_name() const { return reg_name; }
    virtual void code_ref(ostream& s) const { s << reg_name; }
    virtual bool equal_addressing(Addressing* addr) const;
 };
@@ -128,11 +131,11 @@ public:
 class IndirectAddressing : public Addressing
 {
 private:
-   std::string reg_name;
+   char* reg_name;
    int offset;
 public:
-   IndirectAddressing(std::string reg_name_, int offset_) : reg_name(reg_name_), offset(offset_) {}
-   std::string get_reg_name() const { return reg_name; }
+   IndirectAddressing(char* reg_name_, int offset_);
+   char* get_reg_name() const { return reg_name; }
    int get_offset() const { return offset; }
    virtual void code_ref(ostream& s) const { s << offset << "(" << reg_name << ")"; }
    virtual bool equal_addressing(Addressing* addr) const;
@@ -143,8 +146,8 @@ class AddressingTable
 private:
    std::vector<Addressing*> addressing_ptr_vec;
 public:
-   Addressing* add_addressing(std::string reg_name);
-   Addressing* add_addressing(std::string reg_name, int offset);
+   Addressing* add_addressing(char* reg_name);
+   Addressing* add_addressing(char* reg_name, int offset);
 };
 
 extern AddressingTable addressing_table;
@@ -157,6 +160,10 @@ private:
 public:
    TempObjHandler(int max_temp_number_, int current_used_temp_number_) :
       max_temp_number(max_temp_number_), current_used_temp_number(current_used_temp_number_) {}
+   void set_max_temp_number(int max_temp_number_) { max_temp_number = max_temp_number_; }
+   int get_max_temp_number() { return max_temp_number; }
+   void set_current_used_temp_number(int current_used_temp_number_) { current_used_temp_number = current_used_temp_number_; }
+   int get_current_used_temp_number() { return current_used_temp_number; }
    void emit_temp_prepare(ostream &s);
    void emit_temp_restore(ostream &s);
 };

@@ -54,7 +54,7 @@ dotest:	cgen example.cl
 	@echo "\nRunning code generator on example.cl\n"
 	-./mycoolc example.cl
 	-../../bin/coolc -o test/aaa1.s test/t4.cl
-	-./mycoolc -o test/aaa2.s test/t4.cl
+	-./mycoolc -o test/aaa2.s -c test/t4.cl
 	-code --diff test/aaa1.s test/aaa2.s
 
 ${LIBS}:

@@ -31,7 +31,7 @@ std::map<Symbol, T_map_method> class_method_to_index_class;
 std::map<Symbol, std::vector<Symbol>> class_attr_order;
 std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
-SymbolTable<Symbol, Addressing> id_to_location_table;
+SymbolTable<Symbol, Addressing> id_to_addr_table;
 AddressingTable addressing_table;
 
 extern void emit_string_constant(ostream& str, char *s);
@@ -663,6 +663,7 @@ void CgenClassTable::code_protObjs()
 void CgenClassTable::code_object_initializer()
 {
   for (Symbol class_name : class_name_table_vector) {
+    id_to_addr_table.enterscope();
     CgenNodeP current_class_gen_ptr = lookup(class_name);
     Features current_features = current_class_gen_ptr->features;
     Expressions init_assign_exprs = NULL;
@@ -684,14 +685,13 @@ void CgenClassTable::code_object_initializer()
     } else {
       init_assign_exprs = append_Expressions(init_assign_exprs, single_Expressions(object(self)));
     }
-    Expression method_expr = init_assign_exprs ? block(init_assign_exprs) : no_expr();
+    Expression method_expr = block(init_assign_exprs);
     int current_method_max_temp_number = method_expr->get_max_temp_number();
-    id_to_location_table.enterscope();
     auto current_attr_to_index_type = class_attr_to_index_type[class_name];
     for (Symbol attr_name : class_attr_order[class_name]) {
       int attr_index = current_attr_to_index_type[attr_name].first;
       int offset = (3+attr_index)*WORD_SIZE; // 0:class_tag 4:size 8:dispath_table 12:attr_0
-      id_to_location_table.addid(attr_name, addressing_table.add_addressing(SELF, offset));
+      id_to_addr_table.addid(attr_name, addressing_table.add_addressing(SELF, offset));
     }
     emit_init_ref(class_name, str);
     str << ":" << endl;
@@ -703,7 +703,9 @@ void CgenClassTable::code_object_initializer()
     emit_move(SELF, ACC, str); // store current self in $s0
     TempObjHandler temp_obj_handler(current_method_max_temp_number, 0);
     temp_obj_handler.emit_temp_prepare(str);
-    str << JAL << current_class_gen_ptr->get_parent() << CLASSINIT_SUFFIX << endl;
+    if (std::find(class_name_table_vector.begin(), class_name_table_vector.end(), current_class_gen_ptr->get_parent()) != class_name_table_vector.end()) {
+      str << JAL << current_class_gen_ptr->get_parent() << CLASSINIT_SUFFIX << endl;
+    }
     method_expr->code(str, addressing_table.add_addressing(ACC), current_method_max_temp_number, 0);
     temp_obj_handler.emit_temp_restore(str);
     emit_load(FP, 3+current_method_max_temp_number, SP, str); // restore old FP from current frame stack
@@ -711,7 +713,56 @@ void CgenClassTable::code_object_initializer()
     emit_load(RA, 1+current_method_max_temp_number, SP, str); // restore return address of old method from current frame stack
     emit_addiu(SP, SP, (3+current_method_max_temp_number)*WORD_SIZE, str); // move up SP. "3" stands for FP, self and return address
     emit_return(str);
-    id_to_location_table.exitscope();
+    id_to_addr_table.exitscope();
+  }
+}
+
+void CgenClassTable::code_class_methods()
+{
+  for (Symbol class_name : class_name_table_vector) {
+    id_to_addr_table.enterscope();
+    auto current_attr_to_index_type = class_attr_to_index_type[class_name];
+    for (Symbol attr_name : class_attr_order[class_name]) {
+      int attr_index = current_attr_to_index_type[attr_name].first;
+      int offset = (3+attr_index) * WORD_SIZE; // 0:class_tag 4:size 8:dispath_table 12:attr_0
+      id_to_addr_table.addid(attr_name, addressing_table.add_addressing(SELF, offset));
+    }
+    CgenNodeP current_class_gen_ptr = lookup(class_name);
+    Features current_features = current_class_gen_ptr->features;
+    for (int feature_index = current_features->first(); current_features->more(feature_index); feature_index = current_features->next(feature_index)) {
+      Feature current_feature = current_features->nth(feature_index);
+      method_class* current_method = dynamic_cast<method_class*>(current_feature);
+      if (!current_method) {
+        continue;
+      }
+      id_to_addr_table.enterscope();
+      Formals current_formals = current_method->formals;
+      for (int formal_index = current_formals->first(); current_formals->more(formal_index); formal_index = current_formals->next(formal_index)) {
+        formal_class* current_formal = dynamic_cast<formal_class*>(current_formals->nth(formal_index));
+        assert(current_formal && "current_formal should not be NULL");
+        int offset = (current_formals->len()-formal_index) * WORD_SIZE;
+        id_to_addr_table.addid(current_formal->name, addressing_table.add_addressing(SP, offset));
+      }
+      str << class_name << "." << current_method->name << endl;
+      int current_method_max_temp_number = current_method->expr->get_max_temp_number();
+      emit_addiu(SP, SP, -(3+current_method_max_temp_number)*WORD_SIZE, str); // move down SP. "3" stands for FP, self and return address
+      emit_store(FP, 3+current_method_max_temp_number, SP, str); // store old FP in current frame stack
+      emit_store(SELF, 2+current_method_max_temp_number, SP, str); // store old self object in current frame stack
+      emit_store(RA, 1+current_method_max_temp_number, SP, str); // store return address of current method in current frame stack
+      emit_addiu(FP, SP, WORD_SIZE, str); // FP = SP - 4
+      emit_move(SELF, ACC, str); // store current self in $s0
+      TempObjHandler temp_obj_handler(current_method_max_temp_number, 0);
+      temp_obj_handler.emit_temp_prepare(str);
+      current_method->expr->code(str, addressing_table.add_addressing(ACC), current_method_max_temp_number, 0);
+      temp_obj_handler.emit_temp_restore(str);
+      emit_load(FP, 3+current_method_max_temp_number, SP, str); // restore old FP from current frame stack
+      emit_load(SELF, 2+current_method_max_temp_number, SP, str); // restore old self object from current frame stack
+      emit_load(RA, 1+current_method_max_temp_number, SP, str); // restore return address of old method from current frame stack
+      emit_addiu(SP, SP, (3+current_method_max_temp_number)*WORD_SIZE, str); // move up SP. "3" stands for FP, self and return address
+      emit_return(str);
+      id_to_addr_table.exitscope();
+    }
+    id_to_addr_table.exitscope();
   }
 }
 
@@ -1044,6 +1095,8 @@ void CgenClassTable::code()
 //                   - etc...
 
   code_object_initializer();
+
+  code_class_methods();
 
 }
 

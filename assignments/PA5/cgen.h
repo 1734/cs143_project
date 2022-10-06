@@ -17,7 +17,7 @@ extern std::map<Symbol, T_map_method> class_method_to_index_class;
 extern std::map<Symbol, std::vector<Symbol>> class_attr_order;
 extern std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
-extern SymbolTable<Symbol, Addressing> id_to_location_table;
+extern SymbolTable<Symbol, Addressing> id_to_addr_table;
 
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
@@ -68,6 +68,7 @@ private:
    void code_class_dispTabs();
    void code_protObjs();
    void code_object_initializer();
+   void code_class_methods();
 public:
    CgenClassTable(Classes, ostream& str);
    void code();

@@ -17,7 +17,7 @@ extern std::map<Symbol, T_map_method> class_method_to_index_class;
 extern std::map<Symbol, std::vector<Symbol>> class_attr_order;
 extern std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
-extern SymbolTable<Symbol, char*> id_to_location_table;
+extern SymbolTable<Symbol, Addressing> id_to_location_table;
 
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
@@ -108,6 +108,7 @@ class Addressing
 {
 public:
    virtual void code_ref(ostream& s) const = 0;
+   virtual bool equal_addressing(Addressing* addr) const = 0;
 };
 
 // addressing directly using register, for example: $s1
@@ -117,7 +118,9 @@ private:
    std::string reg_name;
 public:
    DirectAddressing(std::string reg_name_) : reg_name(reg_name_) {}
+   std::string get_reg_name() const { return reg_name; }
    virtual void code_ref(ostream& s) const { s << reg_name; }
+   virtual bool equal_addressing(Addressing* addr) const;
 };
 
 // addressing indirectly using register, for example: 0($fp)
@@ -128,8 +131,22 @@ private:
    int offset;
 public:
    IndirectAddressing(std::string reg_name_, int offset_) : reg_name(reg_name_), offset(offset_) {}
+   std::string get_reg_name() const { return reg_name; }
+   int get_offset() const { return offset; }
    virtual void code_ref(ostream& s) const { s << offset << "(" << reg_name << ")"; }
+   virtual bool equal_addressing(Addressing* addr) const;
 };
+
+class AddressingTable
+{
+private:
+   std::vector<Addressing*> addressing_ptr_vec;
+public:
+   Addressing* add_addressing(std::string reg_name);
+   Addressing* add_addressing(std::string reg_name, int offset);
+};
+
+extern AddressingTable addressing_table;
 
 class TempObjHandler
 {
@@ -140,4 +157,5 @@ public:
    TempObjHandler(int max_temp_number_, int current_used_temp_number_) :
       max_temp_number(max_temp_number_), current_used_temp_number(current_used_temp_number_) {}
    void emit_temp_prepare(ostream &s);
+   void emit_temp_restore(ostream &s);
 };

@@ -604,7 +604,7 @@ void CgenClassTable::code_select_gc()
 void CgenClassTable::code_class_nameTab()
 {
   str << CLASSNAMETAB << LABEL;
-  for (Symbol class_name : class_name_table_vector) {
+  for (Symbol class_name : class_name_tag_order) {
     str << WORD;
     (stringtable.lookup_string(class_name->get_string()))->code_ref(str);
     str << endl;
@@ -614,7 +614,7 @@ void CgenClassTable::code_class_nameTab()
 void CgenClassTable::code_class_objTab()
 {
   str << CLASSOBJTAB << LABEL;
-  for (Symbol class_name : class_name_table_vector) {
+  for (Symbol class_name : class_name_tag_order) {
     str << WORD;
     emit_protobj_ref(class_name, str);
     str << endl;
@@ -626,7 +626,7 @@ void CgenClassTable::code_class_objTab()
 
 void CgenClassTable::code_class_dispTabs()
 {
-  for (Symbol class_name : class_name_table_vector) {
+  for (Symbol class_name : class_name_pre_order) {
     str << class_name << DISPTAB_SUFFIX << LABEL;
     for (Symbol method_name : class_method_order[class_name]) {
       str << WORD << class_method_to_index_class[class_name][method_name].second << "." << method_name << endl;
@@ -636,9 +636,10 @@ void CgenClassTable::code_class_dispTabs()
 
 void CgenClassTable::code_protObjs()
 {
-  for (Symbol class_name : class_name_table_vector) {
+  for (Symbol class_name : class_name_pre_order) {
+    str << WORD << "-1" << endl;
     str << class_name << PROTOBJ_SUFFIX << LABEL;
-    str << WORD << class_tag_table[class_name] << endl;
+    str << WORD << class_tag_table[class_name].first << endl;
     str << WORD << class_attr_order[class_name].size()+3 << endl;
     str << WORD << class_name << DISPTAB_SUFFIX << endl;
     for (Symbol attr_name : class_attr_order[class_name]) {
@@ -659,13 +660,12 @@ void CgenClassTable::code_protObjs()
         str << WORD << "0" << endl;
       }
     }
-    str << WORD << "-1" << endl;
   }
 }
 
 void CgenClassTable::code_object_initializer()
 {
-  for (Symbol class_name : class_name_table_vector) {
+  for (Symbol class_name : class_name_pre_order) {
     id_to_addr_table.enterscope();
     id_to_addr_table.addid(self, addressing_table.add_addressing(SELF));
     CgenNodeP current_class_gen_ptr = lookup(class_name);
@@ -708,7 +708,7 @@ void CgenClassTable::code_object_initializer()
     emit_addiu(FP, SP, WORD_SIZE, str); // FP = SP - 4
     emit_move(SELF, ACC, str); // store current self in $s0
     temp_obj_handler_ptr->emit_temp_prepare(str);
-    if (std::find(class_name_table_vector.begin(), class_name_table_vector.end(), current_class_gen_ptr->get_parent()) != class_name_table_vector.end()) {
+    if (std::find(class_name_pre_order.begin(), class_name_pre_order.end(), current_class_gen_ptr->get_parent()) != class_name_pre_order.end()) {
       str << JAL << current_class_gen_ptr->get_parent() << CLASSINIT_SUFFIX << endl;
     }
     method_expr->code(str, addressing_table.add_addressing(ACC));
@@ -724,7 +724,11 @@ void CgenClassTable::code_object_initializer()
 
 void CgenClassTable::code_class_methods()
 {
-  for (Symbol class_name : class_name_table_vector) {
+  for (Symbol class_name : class_name_pre_order) {
+    CgenNodeP current_class_gen_ptr = lookup(class_name);
+    if (current_class_gen_ptr->basic()) {
+      continue;
+    }
     id_to_addr_table.enterscope();
     id_to_addr_table.addid(self, addressing_table.add_addressing(SELF));
     auto current_attr_to_index_type = class_attr_to_index_type[class_name];
@@ -733,7 +737,6 @@ void CgenClassTable::code_class_methods()
       int offset = 3+attr_index; // 0:class_tag 1:size 2:dispath_table 3:attr_0
       id_to_addr_table.addid(attr_name, addressing_table.add_addressing(SELF, offset));
     }
-    CgenNodeP current_class_gen_ptr = lookup(class_name);
     Features current_features = current_class_gen_ptr->features;
     for (int feature_index = current_features->first(); current_features->more(feature_index); feature_index = current_features->next(feature_index)) {
       Feature current_feature = current_features->nth(feature_index);
@@ -765,7 +768,7 @@ void CgenClassTable::code_class_methods()
       emit_load(FP, 3+current_method_max_temp_number, SP, str); // restore old FP from current frame stack
       emit_load(SELF, 2+current_method_max_temp_number, SP, str); // restore old self object from current frame stack
       emit_load(RA, 1+current_method_max_temp_number, SP, str); // restore return address of old method from current frame stack
-      emit_addiu(SP, SP, (3+current_method_max_temp_number)*WORD_SIZE, str); // move up SP. "3" stands for FP, self and return address
+      emit_addiu(SP, SP, (current_formals->len()+3+current_method_max_temp_number)*WORD_SIZE, str); // move up SP. callee restores the SP shift for argument. "3" stands for FP, self and return address
       emit_return(str);
       id_to_addr_table.exitscope();
     }
@@ -953,8 +956,6 @@ void CgenClassTable::install_class(CgenNodeP nd)
 {
   Symbol name = nd->get_name();
   stringtable.add_string(name->get_string());
-  class_name_table_vector.push_back(name);
-  class_tag_table[name] = current_class_tag++;
   if (probe(name))
     {
       return;
@@ -1012,10 +1013,12 @@ void CgenNode::set_parentnd(CgenNodeP p)
 
 void CgenClassTable::traverse_inheritance_tree_to_build()
 {
-  visit(root());
+  current_class_tag = 0;
+  visit1(root());
+  visit2(root());
 }
 
-void CgenClassTable::visit(CgenNodeP nd)
+void CgenClassTable::visit1(CgenNodeP nd)
 {
   assert(nd != NULL);
   Symbol current_class_name = nd->name;
@@ -1060,11 +1063,33 @@ void CgenClassTable::visit(CgenNodeP nd)
   class_attr_order[current_class_name] = std::move(current_attr_order);
   class_attr_to_index_type[current_class_name] = std::move(current_attr_to_index_type);
 
+  class_name_tag_order.push_back(current_class_name);
+  class_tag_table[current_class_name].first = current_class_tag++;
+
   List<CgenNode> *current_children_ptr = nd->get_children();
   CgenNodeP current_child_ptr = NULL;
   while(current_children_ptr && (current_child_ptr = current_children_ptr->hd())) {
-    visit(current_child_ptr);
+    visit1(current_child_ptr);
     current_children_ptr = current_children_ptr->tl();
+  }
+  class_tag_table[current_class_name].second = (current_class_tag - 1);
+}
+
+// Generate class_name_pre_order.
+void CgenClassTable::visit2(CgenNodeP nd) {
+  assert(nd != NULL);
+  Symbol current_class_name = nd->name;
+  class_name_pre_order.push_back(current_class_name);
+  List<CgenNode> *current_children_ptr = nd->get_children();
+  CgenNodeP current_child_ptr = NULL;
+  // brother nodes' order is the same as their order in install_class, we want to reverse that order.
+  std::vector<CgenNodeP> origin_brother_order;
+  while(current_children_ptr && (current_child_ptr = current_children_ptr->hd())) {
+    origin_brother_order.push_back(current_child_ptr);
+    current_children_ptr = current_children_ptr->tl();
+  }
+  for (auto it = origin_brother_order.rbegin(); it != origin_brother_order.rend(); ++it) {
+    visit2(*it);
   }
 }
 
@@ -1143,52 +1168,142 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 void assign_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int assign_class::get_max_temp_number() {
+  return expr->get_max_temp_number();
+}
+
 void static_dispatch_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int static_dispatch_class::get_max_temp_number() {
+  int result = 0;
+  for (int arg_index = actual->first(); actual->more(arg_index); arg_index = actual->next(arg_index)) {
+    result = std::max(result, actual->nth(arg_index)->get_max_temp_number());
+  }
+  return std::max(result, expr->get_max_temp_number());
 }
 
 void dispatch_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int dispatch_class::get_max_temp_number() {
+  int result = 0;
+  for (int arg_index = actual->first(); actual->more(arg_index); arg_index = actual->next(arg_index)) {
+    result = std::max(result, actual->nth(arg_index)->get_max_temp_number());
+  }
+  return std::max(result, expr->get_max_temp_number());
+}
+
 void cond_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int cond_class::get_max_temp_number() {
+  return std::max({pred->get_max_temp_number(), then_exp->get_max_temp_number(), else_exp->get_max_temp_number()});
 }
 
 void loop_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int loop_class::get_max_temp_number() {
+  return std::max(pred->get_max_temp_number(), body->get_max_temp_number());
+}
+
 void typcase_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int typcase_class::get_max_temp_number() {
+  int result = expr->get_max_temp_number();
+  for (int case_index = cases->first(); cases->more(case_index); case_index = cases->next(case_index)) {
+    branch_class* current_branch = dynamic_cast<branch_class*>(cases->nth(case_index));
+    assert(current_branch);
+    result = std::max(result, 1 + current_branch->expr->get_max_temp_number());
+  }
+  return result;
+}
+
 void block_class::code(ostream &s, Addressing* result_addr) {
+  for (int expr_index = body->first(); body->more(expr_index+1); expr_index = body->next(expr_index)) {
+    body->nth(expr_index)->code(s, addressing_table.add_addressing(ACC));
+  }
+  body->nth(body->len()-1)->code(s, result_addr);
+}
+
+int block_class::get_max_temp_number() {
+  int result = 0;
+  for (int expr_index = body->first(); body->more(expr_index); expr_index = body->next(expr_index)) {
+    result = std::max(result, body->nth(expr_index)->get_max_temp_number());
+  }
+  return result;
 }
 
 void let_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int let_class::get_max_temp_number() {
+  return std::max(init->get_max_temp_number(), 1+body->get_max_temp_number());
+}
+
 void plus_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int plus_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
 }
 
 void sub_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int sub_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
+}
+
 void mul_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int mul_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
 }
 
 void divide_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int divide_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
+}
+
 void neg_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int neg_class::get_max_temp_number() {
+  return e1->get_max_temp_number();
 }
 
 void lt_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int lt_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
+}
+
 void eq_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int eq_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
 }
 
 void leq_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int leq_class::get_max_temp_number() {
+  return std::max(e1->get_max_temp_number(), 1+e2->get_max_temp_number());
+}
+
 void comp_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int comp_class::get_max_temp_number() {
+  return e1->get_max_temp_number();
 }
 
 void int_const_class::code(ostream &s, Addressing* result_addr)  
@@ -1199,9 +1314,17 @@ void int_const_class::code(ostream &s, Addressing* result_addr)
   emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
 }
 
+int int_const_class::get_max_temp_number() {
+  return 0;
+}
+
 void string_const_class::code(ostream &s, Addressing* result_addr)
 {
   emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
+}
+
+int string_const_class::get_max_temp_number() {
+  return 0;
 }
 
 void bool_const_class::code(ostream &s, Addressing* result_addr)
@@ -1209,13 +1332,29 @@ void bool_const_class::code(ostream &s, Addressing* result_addr)
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
+int bool_const_class::get_max_temp_number() {
+  return 0;
+}
+
 void new__class::code(ostream &s, Addressing* result_addr) {
+}
+
+int new__class::get_max_temp_number() {
+  return 0;
 }
 
 void isvoid_class::code(ostream &s, Addressing* result_addr) {
 }
 
+int isvoid_class::get_max_temp_number() {
+  return e1->get_max_temp_number();
+}
+
 void no_expr_class::code(ostream &s, Addressing* result_addr) {
+}
+
+int no_expr_class::get_max_temp_number() {
+  return 0;
 }
 
 void object_class::code(ostream &s, Addressing* result_addr) {
@@ -1242,6 +1381,10 @@ void object_class::code(ostream &s, Addressing* result_addr) {
     emit_load(ACC, id_addr_indirect->get_offset(), id_addr_indirect->get_reg_name(), s);
     emit_store(ACC, result_addr_indirect->get_offset(), result_addr_indirect->get_reg_name(), s);
   }
+}
+
+int object_class::get_max_temp_number() {
+  return 0;
 }
 
 DirectAddressing::DirectAddressing(char* reg_name_) {

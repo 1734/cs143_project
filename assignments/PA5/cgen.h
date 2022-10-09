@@ -61,10 +61,12 @@ private:
    void build_inheritance_tree();
    void set_relations(CgenNodeP nd);
    void traverse_inheritance_tree_to_build();
-   void visit(CgenNodeP nd);
+   void visit1(CgenNodeP nd);
+   void visit2(CgenNodeP nd);
 
-   std::vector<Symbol> class_name_table_vector;
-   std::map<Symbol, int> class_tag_table;
+   std::vector<Symbol> class_name_tag_order; // dfs pre-order
+   std::map<Symbol, std::pair<int, int>> class_tag_table;
+   std::vector<Symbol> class_name_pre_order; // dfs pre-order. The brother relations are reversed compared with class_name_tag_order.
    int current_class_tag = 0;
    void code_class_nameTab();
    void code_class_objTab();

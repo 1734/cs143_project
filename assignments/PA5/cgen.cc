@@ -37,6 +37,9 @@ AddressingTable addressing_table;
 
 TempObjHandler* temp_obj_handler_ptr = NULL;
 
+int label_num = 0;
+static char *curr_filename = NULL;
+
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
@@ -729,6 +732,7 @@ void CgenClassTable::code_class_methods()
     if (current_class_gen_ptr->basic()) {
       continue;
     }
+    curr_filename = current_class_gen_ptr->get_filename()->get_string();
     id_to_addr_table.enterscope();
     id_to_addr_table.addid(self, addressing_table.add_addressing(SELF));
     auto current_attr_to_index_type = class_attr_to_index_type[class_name];
@@ -1155,6 +1159,31 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 { }
 
 
+void code_addr1_to_addr2(ostream &s, Addressing* addr1, Addressing* addr2) {
+  DirectAddressing* addr1_direct = dynamic_cast<DirectAddressing*>(addr1);
+  IndirectAddressing* addr1_indirect = dynamic_cast<IndirectAddressing*>(addr1);
+  DirectAddressing* addr2_direct = dynamic_cast<DirectAddressing*>(addr2);
+  IndirectAddressing* addr2_indirect = dynamic_cast<IndirectAddressing*>(addr2);
+  assert((addr1_direct || addr1_indirect) && (addr2_direct || addr2_indirect));
+
+  if(addr1_direct && addr2_direct) {
+    emit_move(addr2_direct->get_reg_name(), addr1_direct->get_reg_name(), s);
+  }
+
+  if(addr1_direct && addr2_indirect) {
+    emit_store(addr1_direct->get_reg_name(), addr2_indirect->get_offset(), addr2_indirect->get_reg_name(), s);
+  }
+
+  if(addr1_indirect && addr2_direct) {
+    emit_load(addr2_direct->get_reg_name(), addr1_indirect->get_offset(), addr1_indirect->get_reg_name(), s);
+  }
+
+  if(addr1_indirect && addr2_indirect) {
+    emit_load(ACC, addr1_indirect->get_offset(), addr1_indirect->get_reg_name(), s);
+    emit_store(ACC, addr2_indirect->get_offset(), addr2_indirect->get_reg_name(), s);
+  }
+}
+
 //******************************************************************
 //
 //   Fill in the following methods to produce code for the
@@ -1166,6 +1195,18 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //*****************************************************************
 
 void assign_class::code(ostream &s, Addressing* result_addr) {
+  Addressing* id_addr = id_to_addr_table.lookup(name);
+  if (dynamic_cast<DirectAddressing*>(id_addr)) {
+    expr->code(s, id_addr);
+    code_addr1_to_addr2(s, id_addr, result_addr);
+  } else if (dynamic_cast<DirectAddressing*>(result_addr)) {
+    expr->code(s, result_addr);
+    code_addr1_to_addr2(s, result_addr, id_addr);
+  } else {
+    expr->code(s, addressing_table.add_addressing(ACC));
+    code_addr1_to_addr2(s, addressing_table.add_addressing(ACC), id_addr);
+    code_addr1_to_addr2(s, addressing_table.add_addressing(ACC), result_addr);
+  }
 }
 
 int assign_class::get_max_temp_number() {
@@ -1173,6 +1214,23 @@ int assign_class::get_max_temp_number() {
 }
 
 void static_dispatch_class::code(ostream &s, Addressing* result_addr) {
+  for (int arg_index = actual->first(); actual->more(arg_index); arg_index = actual->next(arg_index)) {
+    actual->nth(arg_index)->code(s, addressing_table.add_addressing(ACC));
+    emit_store(ACC, 0, SP, s);
+    emit_addiu(SP,SP,4,s);
+  }
+  expr->code(s, addressing_table.add_addressing(ACC));
+  emit_bne(ACC, ZERO, label_num, s);
+  assert(curr_filename);
+  emit_load_string(ACC, stringtable.lookup_string(curr_filename), s);
+  emit_load_imm(T1, expr->get_line_number(), s);
+  emit_jal("_dispatch_abort", s);
+  emit_label_def(label_num++, s);
+  s << LA << T1 << " ";
+  emit_disptable_ref(type_name, s);
+  s << endl;
+  emit_load(T1, class_method_to_index_class[expr->type][name].first, T1, s);
+  emit_jalr(T1, s);
 }
 
 int static_dispatch_class::get_max_temp_number() {
@@ -1359,28 +1417,7 @@ int no_expr_class::get_max_temp_number() {
 
 void object_class::code(ostream &s, Addressing* result_addr) {
   Addressing* id_addr = id_to_addr_table.lookup(name);
-  DirectAddressing* id_addr_direct = dynamic_cast<DirectAddressing*>(id_addr);
-  IndirectAddressing* id_addr_indirect = dynamic_cast<IndirectAddressing*>(id_addr);
-  DirectAddressing* result_addr_direct = dynamic_cast<DirectAddressing*>(result_addr);
-  IndirectAddressing* result_addr_indirect = dynamic_cast<IndirectAddressing*>(result_addr);
-  assert((id_addr_direct || id_addr_indirect) && (result_addr_direct || result_addr_indirect));
-
-  if(id_addr_direct && result_addr_direct) {
-    emit_move(result_addr_direct->get_reg_name(), id_addr_direct->get_reg_name(), s);
-  }
-
-  if(id_addr_direct && result_addr_indirect) {
-    emit_store(id_addr_direct->get_reg_name(), result_addr_indirect->get_offset(), result_addr_indirect->get_reg_name(), s);
-  }
-
-  if(id_addr_indirect && result_addr_direct) {
-    emit_load(result_addr_direct->get_reg_name(), id_addr_indirect->get_offset(), id_addr_indirect->get_reg_name(), s);
-  }
-
-  if(id_addr_indirect && result_addr_indirect) {
-    emit_load(ACC, id_addr_indirect->get_offset(), id_addr_indirect->get_reg_name(), s);
-    emit_store(ACC, result_addr_indirect->get_offset(), result_addr_indirect->get_reg_name(), s);
-  }
+  code_addr1_to_addr2(s, id_addr, result_addr);
 }
 
 int object_class::get_max_temp_number() {

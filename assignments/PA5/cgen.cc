@@ -33,12 +33,13 @@ std::map<Symbol, std::vector<Symbol>> class_attr_order;
 std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
 SymbolTable<Symbol, Addressing> id_to_addr_table;
-AddressingTable addressing_table;
+AddressingTable addr_table;
 
-TempObjHandler* temp_obj_handler_ptr = NULL;
+TempObjHandler* global_tmp_obj_handler_ptr = NULL;
 
 int label_num = 0;
 static char *curr_filename = NULL;
+static Symbol global_current_class_name = NULL;
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
@@ -670,7 +671,7 @@ void CgenClassTable::code_object_initializer()
 {
   for (Symbol class_name : class_name_pre_order) {
     id_to_addr_table.enterscope();
-    id_to_addr_table.addid(self, addressing_table.add_addressing(SELF));
+    id_to_addr_table.addid(self, addr_table.add_addr(SELF));
     CgenNodeP current_class_gen_ptr = lookup(class_name);
     Features current_features = current_class_gen_ptr->features;
     Expressions init_assign_exprs = NULL;
@@ -694,13 +695,13 @@ void CgenClassTable::code_object_initializer()
     }
     Expression method_expr = block(init_assign_exprs);
     int current_method_max_temp_number = method_expr->get_max_temp_number();
-    temp_obj_handler_ptr->set_max_temp_number(current_method_max_temp_number);
-    temp_obj_handler_ptr->set_current_used_temp_number(0);
+    global_tmp_obj_handler_ptr->set_max_temp_number(current_method_max_temp_number);
+    global_tmp_obj_handler_ptr->set_current_used_temp_number(0);
     auto current_attr_to_index_type = class_attr_to_index_type[class_name];
     for (Symbol attr_name : class_attr_order[class_name]) {
       int attr_index = current_attr_to_index_type[attr_name].first;
       int offset = 3+attr_index; // 0:class_tag 1:size 2:dispath_table 3:attr_0
-      id_to_addr_table.addid(attr_name, addressing_table.add_addressing(SELF, offset));
+      id_to_addr_table.addid(attr_name, addr_table.add_addr(SELF, offset));
     }
     emit_init_ref(class_name, str);
     str << ":" << endl;
@@ -710,12 +711,12 @@ void CgenClassTable::code_object_initializer()
     emit_store(RA, 1+current_method_max_temp_number, SP, str); // store return address of current method in current frame stack
     emit_addiu(FP, SP, WORD_SIZE, str); // FP = SP - 4
     emit_move(SELF, ACC, str); // store current self in $s0
-    temp_obj_handler_ptr->emit_temp_prepare(str);
+    global_tmp_obj_handler_ptr->emit_temp_prepare(str);
     if (std::find(class_name_pre_order.begin(), class_name_pre_order.end(), current_class_gen_ptr->get_parent()) != class_name_pre_order.end()) {
       str << JAL << current_class_gen_ptr->get_parent() << CLASSINIT_SUFFIX << endl;
     }
-    method_expr->code(str, addressing_table.add_addressing(ACC));
-    temp_obj_handler_ptr->emit_temp_restore(str);
+    method_expr->code(str, addr_table.add_addr(ACC));
+    global_tmp_obj_handler_ptr->emit_temp_restore(str);
     emit_load(FP, 3+current_method_max_temp_number, SP, str); // restore old FP from current frame stack
     emit_load(SELF, 2+current_method_max_temp_number, SP, str); // restore old self object from current frame stack
     emit_load(RA, 1+current_method_max_temp_number, SP, str); // restore return address of old method from current frame stack
@@ -728,18 +729,19 @@ void CgenClassTable::code_object_initializer()
 void CgenClassTable::code_class_methods()
 {
   for (Symbol class_name : class_name_pre_order) {
+    global_current_class_name = class_name;
     CgenNodeP current_class_gen_ptr = lookup(class_name);
     if (current_class_gen_ptr->basic()) {
       continue;
     }
     curr_filename = current_class_gen_ptr->get_filename()->get_string();
     id_to_addr_table.enterscope();
-    id_to_addr_table.addid(self, addressing_table.add_addressing(SELF));
+    id_to_addr_table.addid(self, addr_table.add_addr(SELF));
     auto current_attr_to_index_type = class_attr_to_index_type[class_name];
     for (Symbol attr_name : class_attr_order[class_name]) {
       int attr_index = current_attr_to_index_type[attr_name].first;
       int offset = 3+attr_index; // 0:class_tag 1:size 2:dispath_table 3:attr_0
-      id_to_addr_table.addid(attr_name, addressing_table.add_addressing(SELF, offset));
+      id_to_addr_table.addid(attr_name, addr_table.add_addr(SELF, offset));
     }
     Features current_features = current_class_gen_ptr->features;
     for (int feature_index = current_features->first(); current_features->more(feature_index); feature_index = current_features->next(feature_index)) {
@@ -751,24 +753,24 @@ void CgenClassTable::code_class_methods()
       id_to_addr_table.enterscope();
       str << class_name << "." << current_method->name << ":" << endl;
       int current_method_max_temp_number = current_method->expr->get_max_temp_number();
-      temp_obj_handler_ptr->set_max_temp_number(current_method_max_temp_number);
-      temp_obj_handler_ptr->set_current_used_temp_number(0);
+      global_tmp_obj_handler_ptr->set_max_temp_number(current_method_max_temp_number);
+      global_tmp_obj_handler_ptr->set_current_used_temp_number(0);
       emit_addiu(SP, SP, -(3+current_method_max_temp_number)*WORD_SIZE, str); // move down SP. "3" stands for FP, self and return address
       emit_store(FP, 3+current_method_max_temp_number, SP, str); // store old FP in current frame stack
       emit_store(SELF, 2+current_method_max_temp_number, SP, str); // store old self object in current frame stack
       emit_store(RA, 1+current_method_max_temp_number, SP, str); // store return address of current method in current frame stack
       emit_addiu(FP, SP, WORD_SIZE, str); // FP = SP - 4
       emit_move(SELF, ACC, str); // store current self in $s0
-      temp_obj_handler_ptr->emit_temp_prepare(str);
+      global_tmp_obj_handler_ptr->emit_temp_prepare(str);
       Formals current_formals = current_method->formals;
       for (int formal_index = current_formals->first(); current_formals->more(formal_index); formal_index = current_formals->next(formal_index)) {
         formal_class* current_formal = dynamic_cast<formal_class*>(current_formals->nth(formal_index));
         assert(current_formal && "current_formal should not be NULL");
         int offset = 3+current_method_max_temp_number+current_formals->len()-formal_index-1;
-        id_to_addr_table.addid(current_formal->name, addressing_table.add_addressing(FP, offset));
+        id_to_addr_table.addid(current_formal->name, addr_table.add_addr(FP, offset));
       }
-      current_method->expr->code(str, addressing_table.add_addressing(ACC));
-      temp_obj_handler_ptr->emit_temp_restore(str);
+      current_method->expr->code(str, addr_table.add_addr(ACC));
+      global_tmp_obj_handler_ptr->emit_temp_restore(str);
       emit_load(FP, 3+current_method_max_temp_number, SP, str); // restore old FP from current frame stack
       emit_load(SELF, 2+current_method_max_temp_number, SP, str); // restore old self object from current frame stack
       emit_load(RA, 1+current_method_max_temp_number, SP, str); // restore return address of old method from current frame stack
@@ -1130,7 +1132,7 @@ void CgenClassTable::code()
 //                   - the class methods
 //                   - etc...
 
-  temp_obj_handler_ptr = new TempObjHandler(0, 0);
+  global_tmp_obj_handler_ptr = new TempObjHandler(0, 0);
 
   code_object_initializer();
 
@@ -1160,6 +1162,9 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 
 
 void code_addr1_to_addr2(ostream &s, Addressing* addr1, Addressing* addr2) {
+  if (addr1->equal_addressing(addr2)) {
+    return;
+  }
   DirectAddressing* addr1_direct = dynamic_cast<DirectAddressing*>(addr1);
   IndirectAddressing* addr1_indirect = dynamic_cast<IndirectAddressing*>(addr1);
   DirectAddressing* addr2_direct = dynamic_cast<DirectAddressing*>(addr2);
@@ -1203,9 +1208,9 @@ void assign_class::code(ostream &s, Addressing* result_addr) {
     expr->code(s, result_addr);
     code_addr1_to_addr2(s, result_addr, id_addr);
   } else {
-    expr->code(s, addressing_table.add_addressing(ACC));
-    code_addr1_to_addr2(s, addressing_table.add_addressing(ACC), id_addr);
-    code_addr1_to_addr2(s, addressing_table.add_addressing(ACC), result_addr);
+    expr->code(s, addr_table.add_addr(ACC));
+    code_addr1_to_addr2(s, addr_table.add_addr(ACC), id_addr);
+    code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
   }
 }
 
@@ -1215,11 +1220,11 @@ int assign_class::get_max_temp_number() {
 
 void static_dispatch_class::code(ostream &s, Addressing* result_addr) {
   for (int arg_index = actual->first(); actual->more(arg_index); arg_index = actual->next(arg_index)) {
-    actual->nth(arg_index)->code(s, addressing_table.add_addressing(ACC));
+    actual->nth(arg_index)->code(s, addr_table.add_addr(ACC));
     emit_store(ACC, 0, SP, s);
-    emit_addiu(SP,SP,4,s);
+    emit_addiu(SP, SP, -4, s);
   }
-  expr->code(s, addressing_table.add_addressing(ACC));
+  expr->code(s, addr_table.add_addr(ACC));
   emit_bne(ACC, ZERO, label_num, s);
   assert(curr_filename);
   emit_load_string(ACC, stringtable.lookup_string(curr_filename), s);
@@ -1229,8 +1234,9 @@ void static_dispatch_class::code(ostream &s, Addressing* result_addr) {
   s << LA << T1 << " ";
   emit_disptable_ref(type_name, s);
   s << endl;
-  emit_load(T1, class_method_to_index_class[expr->type][name].first, T1, s);
+  emit_load(T1, class_method_to_index_class[type_name][name].first, T1, s);
   emit_jalr(T1, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
 }
 
 int static_dispatch_class::get_max_temp_number() {
@@ -1242,6 +1248,32 @@ int static_dispatch_class::get_max_temp_number() {
 }
 
 void dispatch_class::code(ostream &s, Addressing* result_addr) {
+  for (int arg_index = actual->first(); actual->more(arg_index); arg_index = actual->next(arg_index)) {
+    actual->nth(arg_index)->code(s, addr_table.add_addr(ACC));
+    emit_store(ACC, 0, SP, s);
+    emit_addiu(SP, SP, -4, s);
+  }
+  expr->code(s, addr_table.add_addr(ACC));
+  int tmp_label_num = label_num++;
+  emit_bne(ACC, ZERO, tmp_label_num, s);
+  assert(curr_filename);
+  emit_load_string(ACC, stringtable.lookup_string(curr_filename), s);
+  emit_load_imm(T1, expr->get_line_number(), s);
+  emit_jal("_dispatch_abort", s);
+  emit_label_def(tmp_label_num, s);
+  emit_load(T1, 2, ACC, s);
+  if (cgen_debug) {
+    cout << expr->type << " " << name << endl;
+  }
+  Symbol type_name = expr->type;
+  if (type_name == SELF_TYPE) {
+    type_name = global_current_class_name;
+  }
+  assert((class_method_to_index_class.find(type_name) != class_method_to_index_class.end()) &&
+         (class_method_to_index_class[type_name].find(name) != class_method_to_index_class[type_name].end()));
+  emit_load(T1, class_method_to_index_class[type_name][name].first, T1, s);
+  emit_jalr(T1, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
 }
 
 int dispatch_class::get_max_temp_number() {
@@ -1253,6 +1285,16 @@ int dispatch_class::get_max_temp_number() {
 }
 
 void cond_class::code(ostream &s, Addressing* result_addr) {
+  pred->code(s, addr_table.add_addr(ACC));
+  emit_load(T1, 3, ACC, s);
+  int false_branch_label_num = label_num++;
+  emit_beqz(T1, false_branch_label_num, s);
+  then_exp->code(s, result_addr);
+  int if_end_label_num = label_num++;
+  emit_branch(if_end_label_num, s);
+  emit_label_def(false_branch_label_num, s);
+  else_exp->code(s, result_addr);
+  emit_label_def(if_end_label_num, s);
 }
 
 int cond_class::get_max_temp_number() {
@@ -1260,6 +1302,16 @@ int cond_class::get_max_temp_number() {
 }
 
 void loop_class::code(ostream &s, Addressing* result_addr) {
+  int pred_label_num = label_num++;
+  emit_label_def(pred_label_num, s);
+  pred->code(s, addr_table.add_addr(ACC));
+  emit_load(T1, 3, ACC, s);
+  int loop_end_label_num = label_num++;
+  emit_beq(T1, ZERO, loop_end_label_num, s);
+  body->code(s, addr_table.add_addr(ACC));
+  emit_branch(pred_label_num, s);
+  emit_label_def(loop_end_label_num, s);
+  emit_move(ACC, ZERO, s);
 }
 
 int loop_class::get_max_temp_number() {
@@ -1281,7 +1333,7 @@ int typcase_class::get_max_temp_number() {
 
 void block_class::code(ostream &s, Addressing* result_addr) {
   for (int expr_index = body->first(); body->more(expr_index+1); expr_index = body->next(expr_index)) {
-    body->nth(expr_index)->code(s, addressing_table.add_addressing(ACC));
+    body->nth(expr_index)->code(s, addr_table.add_addr(ACC));
   }
   body->nth(body->len()-1)->code(s, result_addr);
 }
@@ -1395,10 +1447,29 @@ int bool_const_class::get_max_temp_number() {
 }
 
 void new__class::code(ostream &s, Addressing* result_addr) {
+  if (type_name == SELF_TYPE) {
+    Addressing* protobj_addr = global_tmp_obj_handler_ptr->get_next_free_temp_addr();
+    emit_load_address(T1, CLASSOBJTAB, s);
+    emit_load(T2, 0, SELF, s);
+    emit_sll(T2, T2, 3, s);
+    emit_addu(T1, T1, T2, s);
+    code_addr1_to_addr2(s, addr_table.add_addr(T1), protobj_addr);
+    emit_load(ACC, 0, T1, s);
+    emit_jal("Object.copy", s);
+    DirectAddressing* protobj_addr_direct = dynamic_cast<DirectAddressing*>(protobj_addr);
+    IndirectAddressing* protobj_addr_indirect = dynamic_cast<IndirectAddressing*>(protobj_addr);
+    if (protobj_addr_direct) {
+      emit_load(T1, 4, protobj_addr_direct->get_reg_name(), s);
+    }
+    if (protobj_addr_indirect) {
+      emit_load(T1, protobj_addr_indirect->get_offset(), protobj_addr_indirect->get_reg_name(), s);
+      emit_load(T1, 4, T1, s);
+    }
+  }
 }
 
 int new__class::get_max_temp_number() {
-  return 0;
+  return 1;
 }
 
 void isvoid_class::code(ostream &s, Addressing* result_addr) {
@@ -1461,7 +1532,7 @@ bool IndirectAddressing::equal_addressing(Addressing* addr) const {
   return true;
 }
 
-Addressing* AddressingTable::add_addressing(char* reg_name) {
+Addressing* AddressingTable::add_addr(char* reg_name) {
   for (auto addr_ptr : addressing_ptr_vec) {
     DirectAddressing* direct_addr = dynamic_cast<DirectAddressing*>(addr_ptr);
     if (direct_addr && strcmp(direct_addr->get_reg_name(), reg_name) == 0) {
@@ -1473,7 +1544,7 @@ Addressing* AddressingTable::add_addressing(char* reg_name) {
   return direct_addr;
 }
 
-Addressing* AddressingTable::add_addressing(char* reg_name, int offset) {
+Addressing* AddressingTable::add_addr(char* reg_name, int offset) {
   for (auto addr_ptr : addressing_ptr_vec) {
     IndirectAddressing* indirect_addr = dynamic_cast<IndirectAddressing*>(addr_ptr);
     if (indirect_addr && strcmp(indirect_addr->get_reg_name(), reg_name) == 0 && indirect_addr->get_offset() == offset) {
@@ -1487,17 +1558,29 @@ Addressing* AddressingTable::add_addressing(char* reg_name, int offset) {
 
 // emit the code for storing old $s1...$s6 to current frame stack
 void TempObjHandler::emit_temp_prepare(ostream &s) {
-  for (int i = 1; i <= min(6, max_temp_number); ++i) {
-    s << SW << "$s" << i << " " << (max_temp_number-1+i) * WORD_SIZE << "(" << FP << ")"
+  for (int i = 0; i < min(6, max_temp_number); ++i) {
+    s << SW << "$s" << i+1 << " " << (max_temp_number-1-i) * WORD_SIZE << "(" << FP << ")"
       << endl;
   }
 }
 
 // emit the code for restoring old $s1...$s6
 void TempObjHandler::emit_temp_restore(ostream &s) {
-  for (int i = 1; i <= min(6, max_temp_number); ++i) {
-    s << LW << "$s" << i << " " << (max_temp_number-1+i) * WORD_SIZE << "(" << FP << ")"
+  for (int i = 0; i < min(6, max_temp_number); ++i) {
+    s << LW << "$s" << i+1 << " " << (max_temp_number-1-i) * WORD_SIZE << "(" << FP << ")"
       << endl;
   }
 }
 
+Addressing* TempObjHandler::get_next_free_temp_addr() {
+  assert(current_used_temp_number < max_temp_number);
+  if(++current_used_temp_number <= 6) {
+    return addr_table.add_addr(temp_register[current_used_temp_number - 1]);
+  }
+  return addr_table.add_addr(FP, current_used_temp_number - 7);
+}
+
+void TempObjHandler::free_last_used_temp_addr() {
+  assert(current_used_temp_number > 0);
+  --current_used_temp_number;
+}

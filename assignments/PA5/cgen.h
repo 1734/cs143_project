@@ -150,17 +150,18 @@ class AddressingTable
 private:
    std::vector<Addressing*> addressing_ptr_vec;
 public:
-   Addressing* add_addressing(char* reg_name);
-   Addressing* add_addressing(char* reg_name, int offset);
+   Addressing* add_addr(char* reg_name);
+   Addressing* add_addr(char* reg_name, int offset);
 };
 
-extern AddressingTable addressing_table;
+extern AddressingTable addr_table;
 
 class TempObjHandler
 {
 private:
    int max_temp_number;
    int current_used_temp_number;
+   char* temp_register[6] = { "$s1", "$s2", "$s3", "$s4", "$s5", "$s6" };
 public:
    TempObjHandler(int max_temp_number_, int current_used_temp_number_) :
       max_temp_number(max_temp_number_), current_used_temp_number(current_used_temp_number_) {}
@@ -170,4 +171,6 @@ public:
    int get_current_used_temp_number() { return current_used_temp_number; }
    void emit_temp_prepare(ostream &s);
    void emit_temp_restore(ostream &s);
+   Addressing* get_next_free_temp_addr();
+   void free_last_used_temp_addr();
 };

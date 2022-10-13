@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <string>
 #include <set>
+#include <execinfo.h>
+#include <stdio.h>
 
 extern std::map<Symbol, std::vector<Symbol>> class_method_order;
 typedef std::pair<int, Symbol> T_index_class;
@@ -18,6 +20,7 @@ extern std::map<Symbol, std::vector<Symbol>> class_attr_order;
 extern std::map<Symbol, std::map<Symbol, std::pair<int, Symbol>>> class_attr_to_index_type;
 
 extern SymbolTable<Symbol, Addressing> id_to_addr_table;
+extern std::map<Symbol, std::pair<int, int>> class_tag_table;
 
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
@@ -67,7 +70,6 @@ private:
    void visit2(CgenNodeP nd);
 
    std::vector<Symbol> class_name_tag_order; // dfs pre-order
-   std::map<Symbol, std::pair<int, int>> class_tag_table;
    std::vector<Symbol> class_name_pre_order; // dfs pre-order. The brother relations are reversed compared with class_name_tag_order.
    int current_class_tag = 0;
    void code_class_nameTab();
@@ -165,12 +167,10 @@ private:
 public:
    TempObjHandler(int max_temp_number_, int current_used_temp_number_) :
       max_temp_number(max_temp_number_), current_used_temp_number(current_used_temp_number_) {}
-   void set_max_temp_number(int max_temp_number_) { max_temp_number = max_temp_number_; }
    int get_max_temp_number() { return max_temp_number; }
-   void set_current_used_temp_number(int current_used_temp_number_) { current_used_temp_number = current_used_temp_number_; }
-   int get_current_used_temp_number() { return current_used_temp_number; }
    void emit_temp_prepare(ostream &s);
    void emit_temp_restore(ostream &s);
-   Addressing* get_next_free_temp_addr();
-   void free_last_used_temp_addr();
+   Addressing* get_next_free_temp_addr() const;
+   void occupy_next_free_temp_addr();
+   void free_last_occupied_temp_addr();
 };

@@ -967,7 +967,6 @@ void CgenClassTable::install_basic_classes(Classes cs)
 void CgenClassTable::install_class(CgenNodeP nd)
 {
   Symbol name = nd->get_name();
-  stringtable.add_string(name->get_string());
   if (probe(name))
     {
       return;
@@ -1077,6 +1076,7 @@ void CgenClassTable::visit1(CgenNodeP nd)
 
   class_name_tag_order.push_back(current_class_name);
   class_tag_table[current_class_name].first = current_class_tag++;
+  stringtable.add_string(current_class_name->get_string());
 
   List<CgenNode> *current_children_ptr = nd->get_children();
   CgenNodeP current_child_ptr = NULL;

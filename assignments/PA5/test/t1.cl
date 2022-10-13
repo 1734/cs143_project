@@ -107,4 +107,54 @@ Class B inherits A {
             1;
         }
     };
+    fun_b_test_mul(): Int {
+        {
+            i1 * i_b;
+            1;
+        }
+    };
+    fun_b_test_div(): Int {
+        {
+            i1 / i_b;
+            1;
+        }
+    };
+    fun_b_test_neg(): Int {
+        {
+            ~i1 + 1;
+            1;
+        }
+    };
+    fun_b_use_bool(b : Bool) : Int { 1 };
+    fun_b_test_not_and_lt(): Int {
+        {
+            not (i1 < i_b) ;
+            --not (not (i1 < i_b)) ;
+            --fun_b_use_bool(i1 < i_b);
+            1;
+        }
+    };
+    fun_b_test_eq(): Int {
+        {
+            i1 = i_b;
+            true = false;
+            "aaa1" = "aaa2";
+            new B = new B;
+            (new B).fun_b_1() = (new B).fun_b_1();
+            let a1:A, a2:A in a1 = a2;
+            1;
+        }
+    };
+    fun_b_test_leq(): Int {
+        {
+            (i1 <= i_b) ;
+            1;
+        }
+    };
+    fun_b_test_isvoid(): Int {
+        {
+            isvoid(i1) ;
+            1;
+        }
+    };
 };

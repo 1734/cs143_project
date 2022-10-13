@@ -35,8 +35,6 @@ typedef CgenNode *CgenNodeP;
 class TempObjHandler;
 extern TempObjHandler* temp_obj_handler_ptr;
 
-extern int label_num;
-
 class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *nds;

@@ -154,12 +154,12 @@ BoolConst truebool(TRUE);
 void program_class::cgen(ostream &os) 
 {
   // spim wants comments to start with '#'
-  os << "# start of generated code\n";
+  // os << "# start of generated code\n";
 
   initialize_constants();
   CgenClassTable *codegen_classtable = new CgenClassTable(classes,os);
 
-  os << "\n# end of generated code\n";
+  // os << "\n# end of generated code\n";
 }
 
 
@@ -1500,6 +1500,27 @@ int sub_class::get_max_temp_number() {
 }
 
 void mul_class::code(ostream &s, Addressing* result_addr) {
+  Addressing* e1_result_addr = global_tmp_obj_handler_ptr->get_next_free_temp_addr();
+  e1->code(s, e1_result_addr);
+  global_tmp_obj_handler_ptr->occupy_next_free_temp_addr();
+  e2->code(s, addr_table.add_addr(ACC));
+  emit_jal("Object.copy", s);
+  DirectAddressing* e1_result_addr_direct = dynamic_cast<DirectAddressing*>(e1_result_addr);
+  IndirectAddressing* e1_result_addr_indirect = dynamic_cast<IndirectAddressing*>(e1_result_addr);
+  my_namespace::assert(e1_result_addr_direct||e1_result_addr_indirect);
+  if (e1_result_addr_direct) {
+    emit_load(T2, 3, ACC, s);
+    emit_load(T1, 3, e1_result_addr_direct->get_reg_name(), s);
+  }
+  if (e1_result_addr_indirect) {
+    emit_load(T1, e1_result_addr_indirect->get_offset(), e1_result_addr_indirect->get_reg_name(), s);
+    emit_load(T2, 3, ACC, s);
+    emit_load(T1, 3, T1, s);
+  }
+  emit_mul(T1, T1, T2, s);
+  emit_store(T1, 3, ACC, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
+  global_tmp_obj_handler_ptr->free_last_occupied_temp_addr();
 }
 
 int mul_class::get_max_temp_number() {
@@ -1507,6 +1528,27 @@ int mul_class::get_max_temp_number() {
 }
 
 void divide_class::code(ostream &s, Addressing* result_addr) {
+  Addressing* e1_result_addr = global_tmp_obj_handler_ptr->get_next_free_temp_addr();
+  e1->code(s, e1_result_addr);
+  global_tmp_obj_handler_ptr->occupy_next_free_temp_addr();
+  e2->code(s, addr_table.add_addr(ACC));
+  emit_jal("Object.copy", s);
+  DirectAddressing* e1_result_addr_direct = dynamic_cast<DirectAddressing*>(e1_result_addr);
+  IndirectAddressing* e1_result_addr_indirect = dynamic_cast<IndirectAddressing*>(e1_result_addr);
+  my_namespace::assert(e1_result_addr_direct||e1_result_addr_indirect);
+  if (e1_result_addr_direct) {
+    emit_load(T2, 3, ACC, s);
+    emit_load(T1, 3, e1_result_addr_direct->get_reg_name(), s);
+  }
+  if (e1_result_addr_indirect) {
+    emit_load(T1, e1_result_addr_indirect->get_offset(), e1_result_addr_indirect->get_reg_name(), s);
+    emit_load(T2, 3, ACC, s);
+    emit_load(T1, 3, T1, s);
+  }
+  emit_div(T1, T1, T2, s);
+  emit_store(T1, 3, ACC, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
+  global_tmp_obj_handler_ptr->free_last_occupied_temp_addr();
 }
 
 int divide_class::get_max_temp_number() {
@@ -1514,6 +1556,12 @@ int divide_class::get_max_temp_number() {
 }
 
 void neg_class::code(ostream &s, Addressing* result_addr) {
+  e1->code(s, addr_table.add_addr(ACC));
+  emit_jal("Object.copy", s);
+  emit_load(T1, 3, ACC, s);
+  emit_neg(T1, T1, s);
+  emit_store(T1, 3, ACC, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
 }
 
 int neg_class::get_max_temp_number() {
@@ -1521,6 +1569,29 @@ int neg_class::get_max_temp_number() {
 }
 
 void lt_class::code(ostream &s, Addressing* result_addr) {
+  my_namespace::assert(result_addr->equal_addressing(addr_table.add_addr(ACC))); // The result of type Bool must be stored in $a0 ?
+  int end_label_num = global_label_num++;
+  Addressing* e1_result_addr = global_tmp_obj_handler_ptr->get_next_free_temp_addr();
+  e1->code(s, e1_result_addr);
+  global_tmp_obj_handler_ptr->occupy_next_free_temp_addr();
+  e2->code(s, addr_table.add_addr(ACC));
+  DirectAddressing* e1_result_addr_direct = dynamic_cast<DirectAddressing*>(e1_result_addr);
+  IndirectAddressing* e1_result_addr_indirect = dynamic_cast<IndirectAddressing*>(e1_result_addr);
+  my_namespace::assert(e1_result_addr_direct||e1_result_addr_indirect);
+  if (e1_result_addr_direct) {
+    emit_load(T1, 3, e1_result_addr_direct->get_reg_name(), s);
+  }
+  if (e1_result_addr_indirect) {
+    emit_load(T1, e1_result_addr_indirect->get_offset(), e1_result_addr_indirect->get_reg_name(), s);
+    emit_load(T1, 3, T1, s);
+  }
+  emit_load(T2, 3, ACC, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_blt(T1, T2, end_label_num, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_label_def(end_label_num, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
+  global_tmp_obj_handler_ptr->free_last_occupied_temp_addr();
 }
 
 int lt_class::get_max_temp_number() {
@@ -1528,6 +1599,20 @@ int lt_class::get_max_temp_number() {
 }
 
 void eq_class::code(ostream &s, Addressing* result_addr) {
+  my_namespace::assert(result_addr->equal_addressing(addr_table.add_addr(ACC))); // The result of type Bool must be stored in $a0 ?
+  int end_label_num = global_label_num++;
+  Addressing* e1_result_addr = global_tmp_obj_handler_ptr->get_next_free_temp_addr();
+  e1->code(s, e1_result_addr);
+  global_tmp_obj_handler_ptr->occupy_next_free_temp_addr();
+  e2->code(s, addr_table.add_addr(T2));
+  code_addr1_to_addr2(s, e1_result_addr, addr_table.add_addr(T1));
+  // my_namespace::assert(e1->type);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_beq(T1, T2, end_label_num, s);
+  emit_load_bool(A1, BoolConst(0), s);
+  emit_jal("equality_test", s);
+  emit_label_def(end_label_num, s);
+  global_tmp_obj_handler_ptr->free_last_occupied_temp_addr();
 }
 
 int eq_class::get_max_temp_number() {
@@ -1535,6 +1620,29 @@ int eq_class::get_max_temp_number() {
 }
 
 void leq_class::code(ostream &s, Addressing* result_addr) {
+  my_namespace::assert(result_addr->equal_addressing(addr_table.add_addr(ACC))); // The result of type Bool must be stored in $a0 ?
+  int end_label_num = global_label_num++;
+  Addressing* e1_result_addr = global_tmp_obj_handler_ptr->get_next_free_temp_addr();
+  e1->code(s, e1_result_addr);
+  global_tmp_obj_handler_ptr->occupy_next_free_temp_addr();
+  e2->code(s, addr_table.add_addr(ACC));
+  DirectAddressing* e1_result_addr_direct = dynamic_cast<DirectAddressing*>(e1_result_addr);
+  IndirectAddressing* e1_result_addr_indirect = dynamic_cast<IndirectAddressing*>(e1_result_addr);
+  my_namespace::assert(e1_result_addr_direct||e1_result_addr_indirect);
+  if (e1_result_addr_direct) {
+    emit_load(T1, 3, e1_result_addr_direct->get_reg_name(), s);
+  }
+  if (e1_result_addr_indirect) {
+    emit_load(T1, e1_result_addr_indirect->get_offset(), e1_result_addr_indirect->get_reg_name(), s);
+    emit_load(T1, 3, T1, s);
+  }
+  emit_load(T2, 3, ACC, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_bleq(T1, T2, end_label_num, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_label_def(end_label_num, s);
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
+  global_tmp_obj_handler_ptr->free_last_occupied_temp_addr();
 }
 
 int leq_class::get_max_temp_number() {
@@ -1542,6 +1650,14 @@ int leq_class::get_max_temp_number() {
 }
 
 void comp_class::code(ostream &s, Addressing* result_addr) {
+  my_namespace::assert(result_addr->equal_addressing(addr_table.add_addr(ACC))); // The result of type Bool must be stored in $a0 ?
+  int end_label_num = global_label_num++;
+  e1->code(s, addr_table.add_addr(ACC));
+  emit_load(T1, 3, ACC, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_beqz(T1, end_label_num, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_label_def(end_label_num, s);
 }
 
 int comp_class::get_max_temp_number() {
@@ -1636,6 +1752,7 @@ void new__class::code(ostream &s, Addressing* result_addr) {
     emit_init_ref(type_name, s);
     s << endl;
   }
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), result_addr);
 }
 
 int new__class::get_max_temp_number() {
@@ -1646,6 +1763,14 @@ int new__class::get_max_temp_number() {
 }
 
 void isvoid_class::code(ostream &s, Addressing* result_addr) {
+  my_namespace::assert(result_addr->equal_addressing(addr_table.add_addr(ACC))); // The result of type Bool must be stored in $a0 ?
+  int end_label_num = global_label_num++;
+  e1->code(s, addr_table.add_addr(ACC));
+  code_addr1_to_addr2(s, addr_table.add_addr(ACC), addr_table.add_addr(T1));
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_beqz(T1, end_label_num, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_label_def(end_label_num, s);
 }
 
 int isvoid_class::get_max_temp_number() {
